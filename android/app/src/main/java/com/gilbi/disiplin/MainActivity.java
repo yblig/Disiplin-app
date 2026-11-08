@@ -84,7 +84,18 @@ public class MainActivity extends Activity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == NativeBridge.MEDIA_PERM_REQ) {
+            boolean ok = grantResults.length > 0;
+            for (int g : grantResults) if (g != android.content.pm.PackageManager.PERMISSION_GRANTED) ok = false;
+            js("window.onNativeMediaPermission && window.onNativeMediaPermission(" + ok + ")");
+            return;
+        }
         if (web != null) web.evaluateJavascript("window.onNativeResume && window.onNativeResume()", null);
+    }
+
+    /** Jalankan JavaScript di WebView (aman dipanggil dari thread mana pun). */
+    void js(String code) {
+        runOnUiThread(() -> { if (web != null) web.evaluateJavascript(code, null); });
     }
 
     @Override

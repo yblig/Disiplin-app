@@ -10,6 +10,7 @@ import android.os.Build;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.Calendar;
 import java.util.HashSet;
 import java.util.Set;
@@ -17,7 +18,7 @@ import java.util.Set;
 /** Menyimpan konfigurasi alarm dari aplikasi web dan menjadwalkannya di AlarmManager. */
 public final class AlarmScheduler {
     static final String PREFS = "disiplin";
-    static final String EXTRA_ID = "id", EXTRA_LABEL = "label", EXTRA_TIME = "time", EXTRA_SNOOZED = "snoozed";
+    static final String EXTRA_ID = "id", EXTRA_LABEL = "label", EXTRA_TIME = "time", EXTRA_SNOOZED = "snoozed", EXTRA_SRC = "src";
     static final int SNOOZE_REQ = 900001, TEST_REQ = 900002;
 
     private AlarmScheduler() {}
@@ -58,9 +59,31 @@ public final class AlarmScheduler {
         return (id.hashCode() & 0x7ffffff) + 1000;
     }
 
+    /** File suara pilihan pengguna: sounds/<key> (key = id alarm, atau "default"). */
+    static File soundFile(Context c, String key) {
+        File dir = new File(c.getFilesDir(), "sounds");
+        dir.mkdirs();
+        return new File(dir, (key == null || key.isEmpty() ? "default" : key).replaceAll("[^A-Za-z0-9_-]", "_"));
+    }
+
+    static JSONObject findAlarm(Context c, String id) {
+        if (id == null || id.isEmpty()) return null;
+        JSONArray alarms = config(c).optJSONArray("alarms");
+        if (alarms == null) return null;
+        for (int i = 0; i < alarms.length(); i++) {
+            JSONObject a = alarms.optJSONObject(i);
+            if (a != null && id.equals(a.optString("id"))) return a;
+        }
+        return null;
+    }
+
     static PendingIntent firePi(Context c, int req, String id, String label, String time, boolean snoozed) {
+        return firePi(c, req, id, label, time, snoozed, id);
+    }
+
+    static PendingIntent firePi(Context c, int req, String id, String label, String time, boolean snoozed, String src) {
         Intent i = new Intent(c, AlarmReceiver.class)
-                .putExtra(EXTRA_ID, id).putExtra(EXTRA_LABEL, label)
+                .putExtra(EXTRA_ID, id).putExtra(EXTRA_LABEL, label).putExtra(EXTRA_SRC, src)
                 .putExtra(EXTRA_TIME, time).putExtra(EXTRA_SNOOZED, snoozed);
         return PendingIntent.getBroadcast(c, req, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
@@ -137,10 +160,14 @@ public final class AlarmScheduler {
     }
 
     static void scheduleOnce(Context c, int req, String label, long at) {
+        scheduleOnce(c, req, label, at, "");
+    }
+
+    static void scheduleOnce(Context c, int req, String label, long at, String src) {
         AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
         Calendar cal = Calendar.getInstance();
         cal.setTimeInMillis(at);
         String time = String.format(java.util.Locale.US, "%02d:%02d", cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE));
-        setExact(c, am, at, firePi(c, req, "once-" + req, label, time, req == SNOOZE_REQ));
+        setExact(c, am, at, firePi(c, req, "once-" + req, label, time, req == SNOOZE_REQ, src));
     }
 }

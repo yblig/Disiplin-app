@@ -72,30 +72,12 @@
       </div>
 
       <div class="card">
-        <h2>🔊 Volume</h2>
-        <p class="hint">100% = volume normal. Di atas 100% suara <b>dikuatkan digital</b> (boost) sampai 800% — jauh lebih keras dari biasanya. Volume HP juga harus dinaikkan penuh.</p>
-        <div class="vol">
-          <input type="range" id="volume" min="10" max="800" step="10">
-          <span id="volLabel">300%</span>
-        </div>
-        <label class="lbl">Suara alarm</label>
-        <select id="soundSel">
-          <option value="siren">🚨 Sirine</option>
-          <option value="beep">⏰ Beep klasik</option>
-          <option value="rooster">🐓 Kokok (naik-turun)</option>
-          <option value="custom">🎵 Suara dari perangkatku</option>
-        </select>
-        <div id="customWrap" class="hidden">
-          <label class="lbl">Pilih file suara (mp3/wav/m4a) dari HP</label>
-          <input type="file" id="customFile" accept="audio/*">
-          <div class="hint" id="customName"></div>
-        </div>
+        <h2>🔊 Suara & Volume Umum</h2>
+        <p class="hint">Dipakai semua alarm yang diatur <b>"Ikut pengaturan umum"</b>. Tiap alarm juga bisa punya suara & volume sendiri (tekan ✏️ di daftar pengingat).<br>
+        100% = normal. Di atas 100% suara <b>dikuatkan digital</b> sampai <b>3000% (MAKS ≈ +30 dB)</b>. Di APK, volume alarm HP otomatis dinaikkan ke penuh dulu.</p>
+        <div id="defaultSound"></div>
         <label class="honest"><input type="checkbox" id="mathLock"> Harus jawab soal hitungan untuk mematikan alarm (biar beneran melek)</label>
         <label class="honest"><input type="checkbox" id="vibrate"> Getar</label>
-        <div class="row">
-          <button class="btn" id="testSound">▶️ Tes Suara</button>
-          <button class="btn" id="stopSound">⏹️ Stop</button>
-        </div>
       </div>
 
       <div class="card">
@@ -179,6 +161,25 @@
       </div>
       <button class="btn primary big" id="dismiss">Aku sudah bangun 💪</button>
       <button class="btn" id="snooze">Tunda 5 menit (maks 1x)</button>
+    </div>
+  </div>
+
+  <!-- Pemilih lagu / video dari HP (APK) -->
+  <div id="picker" class="picker hidden">
+    <div class="pickhead">
+      <button class="btn small" id="pickClose">✕</button>
+      <b>Pilih lagu / video dari HP</b>
+    </div>
+    <div class="pickbody">
+      <input type="text" id="pickSearch" placeholder="🔍 Cari judul lagu / video / folder...">
+      <div class="seg" id="pickSeg">
+        <button data-k="all" class="on">Semua</button>
+        <button data-k="audio">🎵 Audio</button>
+        <button data-k="video">🎬 Video</button>
+      </div>
+      <div class="hint" id="pickInfo"></div>
+      <button class="btn primary big hidden" id="pickPerm">🔓 Izinkan akses lagu & video</button>
+      <ul class="picklist" id="pickList"></ul>
     </div>
   </div>
 

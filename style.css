@@ -104,3 +104,18 @@ nav.bottom button.on { color: var(--accent); }
 
 .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%) translateY(20px); background: #0f172a; color: #fff; padding: 10px 16px; border-radius: 10px; opacity: 0; transition: .25s; pointer-events: none; z-index: 200; max-width: 90vw; text-align: center; }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+.alarms li.editor { display: block; background: var(--bg); border-radius: 12px; padding: 12px; margin: 4px 0 10px; border: none; }
+.alarms .snd { color: var(--accent); font-size: .78rem; font-weight: 600; }
+.edit { background: none; border: none; font-size: 1.1rem; cursor: pointer; }
+.sndedit .row { margin-top: 8px; }
+.s-max { width: 100%; margin-top: 6px; background: linear-gradient(135deg, #ef4444, #f97316) !important; color: #fff !important; border: none !important; }
+.picker { position: fixed; inset: 0; background: var(--bg); z-index: 150; display: flex; flex-direction: column; }
+.pickhead { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: var(--card); border-bottom: 1px solid var(--line); }
+.pickbody { flex: 1; overflow-y: auto; padding: 12px 16px 24px; display: grid; gap: 10px; align-content: start; max-width: 640px; width: 100%; margin: 0 auto; }
+.picklist { list-style: none; margin: 0; padding: 0; }
+.picklist li { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pk-ic { font-size: 1.4rem; }
+.pk-info { flex: 1; min-width: 0; }
+.pk-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picklist .d { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

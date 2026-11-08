@@ -94,7 +94,7 @@ public class AlarmService extends Service {
             wakeLock.acquire(MAX_RING_MS + 60000);
         }
         JSONObject cfg = AlarmScheduler.config(this);
-        startSound(cfg);
+        startSound(cfg, intent.getStringExtra(AlarmScheduler.EXTRA_SRC));
         if (cfg.optBoolean("vibrate", true)) startVibrate();
         handler.removeCallbacksAndMessages(null);
         handler.postDelayed(this::stopSelf, test ? 6000 : MAX_RING_MS);
@@ -111,18 +111,37 @@ public class AlarmService extends Service {
         nm.createNotificationChannel(ch);
     }
 
-    private void startSound(JSONObject cfg) {
+    private void startSound(JSONObject cfg, String src) {
+        // pengaturan umum, lalu ditimpa pengaturan khusus alarm ini (kalau ada)
+        String sound = cfg.optString("sound", "siren");
         int vol = cfg.optInt("volume", 300);
+        String key = "default";
+        JSONObject a = AlarmScheduler.findAlarm(this, src);
+        if (a != null) {
+            String s = a.optString("sound", "default");
+            if (!s.isEmpty() && !"default".equals(s)) {
+                sound = s;
+                if ("custom".equals(s)) key = a.optString("id");
+            }
+            int v = a.optInt("volume", 0);
+            if (v > 0) vol = v;
+        }
+
         AudioManager am = (AudioManager) getSystemService(AUDIO_SERVICE);
         try {
             prevAlarmVolume = am.getStreamVolume(AudioManager.STREAM_ALARM);
             am.setStreamVolume(AudioManager.STREAM_ALARM, am.getStreamMaxVolume(AudioManager.STREAM_ALARM), 0);
         } catch (Exception ignored) {}
 
-        String sound = cfg.optString("sound", "siren");
         try {
-            File f = new File(getFilesDir(), "custom_sound");
-            if (!"custom".equals(sound) || !f.exists()) f = ToneMaker.get(this, sound);
+            File f = null;
+            if ("custom".equals(sound)) {
+                f = AlarmScheduler.soundFile(this, key);
+                if (!f.exists()) f = AlarmScheduler.soundFile(this, "default");
+                if (!f.exists()) f = new File(getFilesDir(), "custom_sound");
+                if (!f.exists()) f = null;
+            }
+            if (f == null) f = ToneMaker.get(this, sound);
             player = buildPlayer(Uri.fromFile(f));
         } catch (Exception e) {
             try {
@@ -135,7 +154,7 @@ public class AlarmService extends Service {
         if (vol > 100) {
             try {
                 enhancer = new LoudnessEnhancer(player.getAudioSessionId());
-                // 100 mB = 1 dB; 800% ≈ +18 dB
+                // 100 mB = 1 dB; 800% ≈ +18 dB, 3000% (MAKS) ≈ +29.5 dB
                 enhancer.setTargetGain((int) Math.round(2000 * Math.log10(vol / 100.0)));
                 enhancer.setEnabled(true);
             } catch (Exception ignored) {}

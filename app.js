@@ -78,6 +78,17 @@ function syncNative() {
 }
 const save = () => { localStorage.setItem(STORE, JSON.stringify(S)); syncNative(); };
 
+// Volume: 10%..3000%. Slider 0..100 -> separuh kiri 10-100%, separuh kanan 100-3000% (logaritmik)
+const MAX_VOL = 3000;
+const posToVol = p => p <= 50 ? Math.round((10 + p * 1.8) / 10) * 10 : Math.min(MAX_VOL, Math.round(100 * Math.pow(MAX_VOL / 100, (p - 50) / 50) / 10) * 10);
+const volToPos = v => v <= 100 ? (v - 10) / 1.8 : 50 + 50 * Math.log(v / 100) / Math.log(MAX_VOL / 100);
+const volText = v => v >= MAX_VOL ? 'MAKS' : v + '%';
+const effSound = a => (a && a.sound && a.sound !== 'default') ? a.sound : S.sound;
+const effVol = a => (a && a.volume) ? a.volume : S.volume;
+const effKey = a => (a && a.sound === 'custom') ? a.id : 'default';
+const SOUND_NAMES = { siren: '🚨 Sirine', beep: '⏰ Beep', rooster: '🐓 Kokok', custom: '🎵 Dari HP' };
+S.alarms.forEach(a => { if (!a.sound) a.sound = 'default'; if (a.volume === undefined) a.volume = null; });
+
 // ---------- IndexedDB untuk file suara ----------
 function idb() {
   return new Promise((res, rej) => {
@@ -98,7 +109,7 @@ async function idbGet(k) {
 
 // ---------- Audio (dengan BOOST di atas 100%) ----------
 const Sound = {
-  ctx: null, master: null, boost: null, nodes: [], timers: [], customBuf: null,
+  ctx: null, master: null, boost: null, nodes: [], timers: [], bufs: {},
   ensure() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -112,25 +123,25 @@ const Sound = {
       this.boost.connect(shaper).connect(this.ctx.destination);
     }
     if (this.ctx.state !== 'running') this.ctx.resume();
-    this.boost.gain.value = S.volume / 100;
     return this.ctx;
   },
   setVolume(v) { if (this.boost) this.boost.gain.setTargetAtTime(v / 100, this.ctx.currentTime, 0.05); },
-  async loadCustom() {
-    const blob = await idbGet('custom').catch(() => null);
+  async loadCustom(key = 'default') {
+    let blob = await idbGet('custom-' + key).catch(() => null);
+    if (!blob && key === 'default') blob = await idbGet('custom').catch(() => null); // data lama
     if (!blob) return null;
     const ctx = this.ensure();
-    const buf = await blob.arrayBuffer();
-    this.customBuf = await ctx.decodeAudioData(buf);
-    return this.customBuf;
+    this.bufs[key] = await ctx.decodeAudioData(await blob.arrayBuffer()); // audio & video (mp4, webm, ...)
+    return this.bufs[key];
   },
   osc(type, freq) { const o = this.ctx.createOscillator(); o.type = type; o.frequency.value = freq; this.nodes.push(o); return o; },
-  async play(kind = S.sound) {
+  async play(kind = S.sound, volume = S.volume, key = 'default') {
     this.stop();
     const ctx = this.ensure();
+    this.boost.gain.value = volume / 100;
     const out = ctx.createGain(); out.gain.value = 1; out.connect(this.boost); this.nodes.push(out);
     if (kind === 'custom') {
-      const buf = this.customBuf || await this.loadCustom().catch(() => null);
+      const buf = this.bufs[key] || await this.loadCustom(key).catch(() => null);
       if (buf) {
         const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true;
         src.connect(out); src.start(); this.nodes.push(src);
@@ -277,20 +288,189 @@ function renderStreak() {
 }
 
 // ---------- PENGINGAT ----------
+let openAlarm = null;
 function renderAlarms() {
   const ul = $('#alarmList'); ul.innerHTML = '';
   S.alarms.sort((a, b) => a.time.localeCompare(b.time)).forEach(a => {
     const li = document.createElement('li');
     const days = a.days.length === 7 ? 'Setiap hari' : a.days.length ? a.days.slice().sort().map(d => DAYS[d]).join(', ') : 'Sekali';
-    li.innerHTML = `<div class="t">${a.time}</div><div class="info"><div>${esc(a.label)}</div><div class="d">${days}</div></div>`;
+    const snd = effSound(a) === 'custom' ? '🎵 ' + (a.sound === 'custom' ? (a.customName || 'Dari HP') : (S.customName || 'Dari HP')) : SOUND_NAMES[effSound(a)];
+    li.innerHTML = `<div class="t">${a.time}</div><div class="info"><div>${esc(a.label)}</div><div class="d">${days}</div>
+      <div class="snd">${esc(snd)} · 🔊 ${volText(effVol(a))}${a.sound === 'default' && !a.volume ? ' (umum)' : ''}</div></div>`;
+    const ed = document.createElement('button'); ed.className = 'edit'; ed.textContent = openAlarm === a.id ? '✖️' : '✏️';
+    ed.onclick = () => { openAlarm = openAlarm === a.id ? null : a.id; renderAlarms(); };
     const sw = document.createElement('button'); sw.className = 'switch' + (a.on ? ' on' : '');
     sw.onclick = () => { a.on = !a.on; save(); renderAlarms(); };
     const del = document.createElement('button'); del.className = 'del'; del.textContent = '🗑️';
     del.onclick = () => { if (confirm('Hapus pengingat ini?')) { S.alarms = S.alarms.filter(x => x !== a); save(); renderAlarms(); } };
-    li.append(sw, del); ul.append(li);
+    li.append(ed, sw, del); ul.append(li);
+    if (openAlarm === a.id) ul.append(alarmEditor(a));
   });
   if (NATIVE) setTimeout(renderNative, 50);
 }
+
+function alarmEditor(a) {
+  const li = document.createElement('li'); li.className = 'editor';
+  li.innerHTML = `<label class="lbl">Jam</label><input type="time" class="e-time" value="${a.time}">
+    <label class="lbl">Tulisan pengingat</label><input type="text" class="e-label" value="${esc(a.label)}">
+    <label class="lbl">Hari</label><div class="days e-days"></div>`;
+  const q = sel => li.querySelector(sel);
+  q('.e-time').onchange = ev => { if (ev.target.value) { a.time = ev.target.value; save(); renderAlarms(); } };
+  q('.e-label').onchange = ev => { a.label = ev.target.value.trim() || 'Pengingat!'; save(); renderAlarms(); };
+  const drawDays = () => {
+    const w = q('.e-days'); w.innerHTML = '';
+    [1, 2, 3, 4, 5, 6, 0].forEach(d => {
+      const b = document.createElement('button'); b.textContent = DAYS[d]; b.className = a.days.includes(d) ? 'on' : '';
+      b.onclick = () => { a.days = a.days.includes(d) ? a.days.filter(x => x !== d) : a.days.concat(d); save(); drawDays(); };
+      w.append(b);
+    });
+  };
+  drawDays();
+  li.append(soundEditor(a, a.id, true, () => {
+    // perbarui ringkasan di baris alarm tanpa menutup editor
+    const row = li.previousElementSibling && li.previousElementSibling.querySelector('.snd');
+    if (row) {
+      const snd = effSound(a) === 'custom' ? '🎵 ' + (a.sound === 'custom' ? (a.customName || 'Dari HP') : (S.customName || 'Dari HP')) : SOUND_NAMES[effSound(a)];
+      row.textContent = `${snd} · 🔊 ${volText(effVol(a))}${a.sound === 'default' && !a.volume ? ' (umum)' : ''}`;
+    }
+  }));
+  const done = document.createElement('button'); done.className = 'btn primary big'; done.textContent = '✔️ Selesai';
+  done.onclick = () => { openAlarm = null; renderAlarms(); };
+  li.append(done);
+  return li;
+}
+
+/** Editor suara + volume. t = S (umum) atau objek alarm; key = 'default' atau id alarm. */
+function soundEditor(t, key, isAlarm, onChange = () => {}) {
+  const w = document.createElement('div'); w.className = 'sndedit';
+  const opts = (isAlarm ? [['default', '⚙️ Ikut pengaturan umum']] : []).concat([
+    ['siren', '🚨 Sirine'], ['beep', '⏰ Beep klasik'], ['rooster', '🐓 Kokok (naik-turun)'], ['custom', '🎵 Lagu / video dari HP']]);
+  w.innerHTML = `<label class="lbl">Suara</label>
+    <select class="s-sel">${opts.map(([v, n]) => `<option value="${v}">${n}</option>`).join('')}</select>
+    <div class="s-custom hidden"><div class="hint s-name"></div>
+      <button class="btn s-pick">📂 Pilih lagu / video dari HP</button>
+      <input type="file" class="s-file" accept="audio/*,video/*" hidden></div>
+    ${isAlarm ? '<label class="honest"><input type="checkbox" class="s-own"> Volume khusus untuk alarm ini</label>' : ''}
+    <div class="s-volwrap"><label class="lbl">Volume</label>
+      <div class="vol"><input type="range" class="s-vol" min="0" max="100" step="1"><span class="s-vlabel"></span></div>
+      <button class="btn s-max">🔥 MAKS — paling keras (3000%)</button></div>
+    <div class="row"><button class="btn s-test">▶️ Tes suara</button><button class="btn s-stop">⏹️ Stop</button></div>`;
+  const q = sel => w.querySelector(sel);
+  const sel = q('.s-sel'), vol = q('.s-vol'), own = q('.s-own');
+  sel.value = t.sound || (isAlarm ? 'default' : 'siren');
+  const refresh = () => {
+    q('.s-custom').classList.toggle('hidden', sel.value !== 'custom');
+    q('.s-name').textContent = t.customName ? '✅ Dipilih: ' + t.customName : 'Belum ada lagu/video dipilih.';
+    const v = isAlarm ? effVol(t) : t.volume;
+    if (own) { own.checked = !!t.volume; q('.s-volwrap').classList.toggle('hidden', !t.volume); }
+    vol.value = volToPos(v);
+    const lb = q('.s-vlabel'); lb.textContent = volText(v); lb.style.color = v > 100 ? 'var(--accent)' : '';
+    onChange();
+  };
+  const pick = () => {
+    if (NATIVE) openPicker(key, name => { t.customName = name; t.sound = 'custom'; sel.value = 'custom'; save(); refresh(); });
+    else q('.s-file').click();
+  };
+  sel.onchange = () => { t.sound = sel.value; save(); refresh(); if (sel.value === 'custom' && !t.customName) pick(); };
+  vol.oninput = () => { t.volume = posToVol(+vol.value); save(); refresh(); Sound.setVolume(t.volume); };
+  q('.s-max').onclick = () => { t.volume = MAX_VOL; save(); refresh(); Sound.setVolume(MAX_VOL); toast('Volume MAKSIMAL 🔥'); };
+  if (own) own.onchange = () => { t.volume = own.checked ? S.volume : null; save(); refresh(); };
+  q('.s-pick').onclick = pick;
+  q('.s-file').onchange = async ev => {
+    const f = ev.target.files[0]; if (!f) return;
+    try {
+      await idbPut('custom-' + key, f);
+      delete Sound.bufs[key];
+      await Sound.loadCustom(key);
+      t.customName = f.name; save(); refresh(); toast('Suara tersimpan 🎵');
+    } catch (e) { toast('File ini tidak bisa diputar, pilih yang lain'); }
+  };
+  q('.s-test').onclick = () => {
+    const a = isAlarm ? t : null;
+    if (NATIVE) { syncNative(); NATIVE.testSoundFor(isAlarm ? t.id : ''); return; }
+    Sound.play(effSound(a), effVol(a), effKey(a)); setTimeout(() => Sound.stop(), 6000);
+  };
+  q('.s-stop').onclick = () => { if (NATIVE) NATIVE.stopSound(); else Sound.stop(); };
+  refresh();
+  return w;
+}
+
+// ---------- Pemilih lagu/video dari HP (APK): cari otomatis, tanpa cari folder ----------
+let pickState = null, mediaCache = null, previewing = null;
+function fmtDur(ms) { if (!ms) return ''; const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; }
+function openPicker(key, onDone) {
+  pickState = { key, onDone, kind: (pickState && pickState.kind) || 'all', busy: false };
+  $('#picker').classList.remove('hidden');
+  $('#pickSearch').value = '';
+  if (!NATIVE.hasMediaPermission()) {
+    $('#pickInfo').textContent = 'Izinkan akses lagu & video sekali saja, nanti semua file di HP langsung muncul di sini.';
+    $('#pickList').innerHTML = '';
+    $('#pickPerm').classList.remove('hidden');
+    return;
+  }
+  $('#pickPerm').classList.add('hidden');
+  loadMedia();
+}
+function loadMedia() {
+  $('#pickInfo').textContent = '🔎 Mencari semua lagu & video di HP...';
+  setTimeout(() => {
+    try { mediaCache = JSON.parse(NATIVE.listMedia()).sort((a, b) => b.added - a.added); } catch (e) { mediaCache = []; }
+    renderPicker();
+  }, 30);
+}
+function closePicker() {
+  if (NATIVE) NATIVE.stopPreview();
+  previewing = null; pickState = null;
+  $('#picker').classList.add('hidden');
+}
+function renderPicker() {
+  if (!pickState || !mediaCache) return;
+  const q = $('#pickSearch').value.trim().toLowerCase();
+  const list = mediaCache.filter(m => (pickState.kind === 'all' || m.kind === pickState.kind)
+    && (!q || (m.name + ' ' + m.folder).toLowerCase().includes(q)));
+  const nA = mediaCache.filter(m => m.kind === 'audio').length, nV = mediaCache.length - nA;
+  $('#pickInfo').textContent = mediaCache.length
+    ? `Ditemukan ${nA} audio & ${nV} video. Tampil ${Math.min(list.length, 300)} dari ${list.length}${list.length > 300 ? ' — ketik untuk mencari' : ''}.`
+    : 'Tidak ada lagu/video di HP ini.';
+  const ul = $('#pickList'); ul.innerHTML = '';
+  list.slice(0, 300).forEach(m => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="pk-ic">${m.kind === 'video' ? '🎬' : '🎵'}</span>
+      <div class="pk-info"><div class="pk-name">${esc(m.name)}</div><div class="d">${esc(m.folder || '')}${m.duration ? ' · ' + fmtDur(m.duration) : ''}</div></div>`;
+    const play = document.createElement('button'); play.className = 'btn small'; play.textContent = previewing === m.uri ? '⏹' : '▶';
+    play.onclick = () => {
+      if (previewing === m.uri) { NATIVE.stopPreview(); previewing = null; } else { NATIVE.previewMedia(m.uri); previewing = m.uri; }
+      renderPicker();
+    };
+    const use = document.createElement('button'); use.className = 'btn small primary'; use.textContent = 'Pilih';
+    use.onclick = () => {
+      if (pickState.busy) return;
+      NATIVE.stopPreview(); previewing = null; pickState.busy = true;
+      $('#pickInfo').textContent = m.kind === 'video' ? '🎬 Mengubah video jadi suara alarm... tunggu sebentar' : '💾 Menyimpan suara...';
+      NATIVE.useMedia(pickState.key, m.uri, m.name, m.kind === 'video');
+    };
+    li.append(play, use); ul.append(li);
+  });
+}
+window.onNativeMediaPermission = granted => {
+  if (!pickState) return;
+  if (granted) { $('#pickPerm').classList.add('hidden'); loadMedia(); }
+  else $('#pickInfo').textContent = 'Izin ditolak. Buka Pengaturan → Aplikasi → Disiplin → Izin, lalu izinkan Musik & Video.';
+};
+window.onNativeMediaUsed = (key, ok, name, converted) => {
+  if (!pickState || pickState.key !== key) return;
+  pickState.busy = false;
+  if (!ok) { toast('File ini tidak bisa diputar, pilih yang lain'); renderPicker(); return; }
+  const cb = pickState.onDone; closePicker(); cb(name);
+  toast(converted ? 'Video berhasil diubah jadi suara alarm 🎵' : 'Suara alarm tersimpan 🎵');
+};
+$('#pickClose').onclick = closePicker;
+$('#pickPerm').onclick = () => NATIVE.requestMediaPermission();
+$('#pickSearch').oninput = renderPicker;
+document.querySelectorAll('#pickSeg button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#pickSeg button').forEach(x => x.classList.toggle('on', x === b));
+  pickState && (pickState.kind = b.dataset.k); renderPicker();
+});
 
 const newDays = new Set(ALL_DAYS);
 function renderNewDays() {
@@ -309,39 +489,11 @@ $('#addAlarm').onclick = () => {
   save(); renderAlarms(); toast('Pengingat ditambahkan ⏰');
 };
 
-// volume & suara
-const vol = $('#volume');
-vol.value = S.volume; $('#volLabel').textContent = S.volume + '%';
-vol.oninput = () => {
-  S.volume = +vol.value; $('#volLabel').textContent = S.volume + '%';
-  $('#volLabel').style.color = S.volume > 100 ? 'var(--accent)' : '';
-  Sound.setVolume(S.volume); save();
-};
-$('#soundSel').value = S.sound;
-$('#customWrap').classList.toggle('hidden', S.sound !== 'custom');
-$('#customName').textContent = S.customName ? 'Dipilih: ' + S.customName : '';
-$('#soundSel').onchange = ev => { S.sound = ev.target.value; save(); $('#customWrap').classList.toggle('hidden', S.sound !== 'custom'); };
-$('#customFile').onchange = async ev => {
-  const f = ev.target.files[0]; if (!f) return;
-  try {
-    await idbPut('custom', f);
-    if (NATIVE) {
-      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
-      if (!NATIVE.saveCustomSound(b64)) throw new Error('native');
-    }
-    S.customName = f.name; save();
-    Sound.customBuf = null; await Sound.loadCustom();
-    $('#customName').textContent = 'Dipilih: ' + f.name; toast('Suara tersimpan 🎵');
-  } catch (e) { toast('Gagal membaca file suara'); }
-};
+// suara & volume umum
+$('#defaultSound').append(soundEditor(S, 'default', false, () => { if (typeof renderAlarms === 'function' && !openAlarm) setTimeout(renderAlarmsSoft, 0); }));
+function renderAlarmsSoft() { if (!openAlarm) renderAlarms(); }
 $('#mathLock').checked = S.mathLock; $('#mathLock').onchange = ev => { S.mathLock = ev.target.checked; save(); };
 $('#vibrate').checked = S.vibrate; $('#vibrate').onchange = ev => { S.vibrate = ev.target.checked; save(); };
-$('#testSound').onclick = () => {
-  if (NATIVE) { syncNative(); NATIVE.testSound(); return; }
-  Sound.play(); setTimeout(() => Sound.stop(), 5000);
-};
-$('#stopSound').onclick = () => { if (NATIVE) NATIVE.stopSound(); else Sound.stop(); };
-
 // ---------- Mode APK: status izin Android ----------
 const PERMS = [
   ['notif', '🔔 Notifikasi'],
@@ -429,15 +581,15 @@ function checkAlarms() {
     fired.add(key);
     localStorage.setItem('disiplin-fired', JSON.stringify([...fired].slice(-60)));
     if (!a.days.length) { a.on = false; save(); renderAlarms(); } // sekali saja
-    return ring(a.time, a.label);
+    return ring(a.time, a.label, false, a);
   }
   const due = snoozes.find(s => s.at <= Date.now());
-  if (due) { snoozes = snoozes.filter(s => s !== due); ring(hm, due.label, true); }
+  if (due) { snoozes = snoozes.filter(s => s !== due); ring(hm, due.label, true, due.alarm); }
 }
 setInterval(checkAlarms, 1000);
 
-function ring(time, label, wasSnoozed = false) {
-  ringing = { time, label, wasSnoozed };
+function ring(time, label, wasSnoozed = false, alarm = null) {
+  ringing = { time, label, wasSnoozed, alarm };
   $('#ringTime').textContent = time;
   $('#ringLabel').textContent = label;
   $('#snooze').classList.toggle('hidden', wasSnoozed);
@@ -449,7 +601,7 @@ function ring(time, label, wasSnoozed = false) {
   }
   $('#mathBox').classList.toggle('hidden', !S.mathLock);
   $('#ring').classList.remove('hidden');
-  Sound.play();
+  Sound.play(effSound(alarm), effVol(alarm), effKey(alarm));
   if (S.vibrate && navigator.vibrate) { navigator.vibrate([800, 300, 800, 300, 800]); ringing.vib = setInterval(() => navigator.vibrate([800, 300, 800]), 2500); }
   if ('Notification' in window && Notification.permission === 'granted') {
     const opt = { body: label, tag: 'disiplin-alarm', renotify: true, requireInteraction: true, vibrate: [800, 300, 800], icon: 'icons/icon.svg' };
@@ -469,7 +621,7 @@ $('#dismiss').onclick = () => {
 };
 $('#snooze').onclick = () => {
   if (!ringing) return;
-  snoozes.push({ at: Date.now() + 5 * 60 * 1000, label: ringing.label + ' (tunda)' });
+  snoozes.push({ at: Date.now() + 5 * 60 * 1000, label: ringing.label + ' (tunda)', alarm: ringing.alarm });
   stopRing(); toast('Ditunda 5 menit. Cuma sekali ya!');
 };
 

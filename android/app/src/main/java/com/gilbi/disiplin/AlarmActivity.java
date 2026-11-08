@@ -126,7 +126,8 @@ public class AlarmActivity extends Activity {
             Button snooze = button("Tunda 5 menit (maks 1x)", false);
             snooze.setOnClickListener(v -> {
                 AlarmScheduler.scheduleOnce(this, AlarmScheduler.SNOOZE_REQ,
-                        (label == null ? "Pengingat" : label) + " (tunda)", System.currentTimeMillis() + 5 * 60 * 1000L);
+                        (label == null ? "Pengingat" : label) + " (tunda)", System.currentTimeMillis() + 5 * 60 * 1000L,
+                        getIntent().getStringExtra(AlarmScheduler.EXTRA_SRC));
                 AlarmService.stop(this);
                 Toast.makeText(this, "Ditunda 5 menit. Cuma sekali ya!", Toast.LENGTH_LONG).show();
                 finish();
