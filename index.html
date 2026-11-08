@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#ef4444">
+  <title>Disiplin</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon.svg">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div>
+      <div class="hello" id="hello">Halo!</div>
+      <div class="date" id="todayLabel"></div>
+    </div>
+    <div class="streak" id="streak" title="Hari beruntun dengan skor ≥ 80%">🔥 0</div>
+  </header>
+
+  <main>
+    <!-- ================= HARI INI ================= -->
+    <section id="tab-today" class="tab active">
+      <div class="card quote" id="quote"></div>
+
+      <div class="card">
+        <h2>✅ Checklist Hari Ini</h2>
+        <p class="hint">Jawab <b>Ya</b> atau <b>Tidak</b> untuk setiap kegiatan. Jujur ya — yang kamu bohongi cuma dirimu sendiri.</p>
+        <ul class="checklist" id="checklist"></ul>
+      </div>
+
+      <div class="card">
+        <h2>🍽️ Aturan Makan</h2>
+        <p class="hint">Cuma boleh makan <b>pagi (sebelum/di sekolah)</b> dan <b>malam</b>. Tanpa snack / ngemil.</p>
+        <ul class="checklist" id="meallist"></ul>
+        <div id="snackNoteWrap" class="hidden">
+          <label class="lbl">Kamu ngemil apa? (jujur)</label>
+          <input type="text" id="snackNote" placeholder="mis. keripik, gorengan, es manis...">
+        </div>
+      </div>
+
+      <div class="card">
+        <label class="honest"><input type="checkbox" id="honestPledge"> Aku menjawab semua di atas dengan <b>JUJUR</b>.</label>
+        <button class="btn primary big" id="saveDay">💾 Simpan Hari Ini</button>
+        <div class="score" id="todayScore"></div>
+      </div>
+    </section>
+
+    <!-- ================= PENGINGAT ================= -->
+    <section id="tab-alarms" class="tab">
+      <div class="card warn" id="permCard">
+        <b>Penting supaya pengingat bunyi:</b>
+        <ol>
+          <li>Tekan <b>Izinkan Notifikasi</b> di bawah.</li>
+          <li>Pasang aplikasi ke layar utama (menu browser → <i>Tambahkan ke layar utama</i>).</li>
+          <li>Biarkan aplikasi <b>terbuka</b> (boleh layar redup) saat malam — aktifkan <b>Mode Jaga Layar</b>. Browser tidak bisa membunyikan suara keras kalau aplikasi ditutup total.</li>
+          <li>Matikan mode senyap / Jangan Ganggu di HP.</li>
+        </ol>
+        <div class="row">
+          <button class="btn" id="btnNotif">🔔 Izinkan Notifikasi</button>
+          <button class="btn" id="btnWake">🌙 Mode Jaga Layar: OFF</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>🔊 Volume</h2>
+        <p class="hint">100% = volume normal. Di atas 100% suara <b>dikuatkan digital</b> (boost) sampai 800% — jauh lebih keras dari biasanya. Volume HP juga harus dinaikkan penuh.</p>
+        <div class="vol">
+          <input type="range" id="volume" min="10" max="800" step="10">
+          <span id="volLabel">300%</span>
+        </div>
+        <label class="lbl">Suara alarm</label>
+        <select id="soundSel">
+          <option value="siren">🚨 Sirine</option>
+          <option value="beep">⏰ Beep klasik</option>
+          <option value="rooster">🐓 Kokok (naik-turun)</option>
+          <option value="custom">🎵 Suara dari perangkatku</option>
+        </select>
+        <div id="customWrap" class="hidden">
+          <label class="lbl">Pilih file suara (mp3/wav/m4a) dari HP</label>
+          <input type="file" id="customFile" accept="audio/*">
+          <div class="hint" id="customName"></div>
+        </div>
+        <label class="honest"><input type="checkbox" id="mathLock"> Harus jawab soal hitungan untuk mematikan alarm (biar beneran melek)</label>
+        <label class="honest"><input type="checkbox" id="vibrate"> Getar</label>
+        <div class="row">
+          <button class="btn" id="testSound">▶️ Tes Suara</button>
+          <button class="btn" id="stopSound">⏹️ Stop</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>⏰ Daftar Pengingat</h2>
+        <ul class="alarms" id="alarmList"></ul>
+        <h3>Tambah pengingat</h3>
+        <div class="form">
+          <input type="time" id="newAlarmTime" value="05:00">
+          <input type="text" id="newAlarmLabel" placeholder="mis. Bangun pagi!">
+          <div class="days" id="newAlarmDays"></div>
+          <button class="btn primary" id="addAlarm">➕ Tambah</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= PERKEMBANGAN ================= -->
+    <section id="tab-stats" class="tab">
+      <div class="card">
+        <div class="seg" id="periodSeg">
+          <button data-p="week" class="on">Minggu</button>
+          <button data-p="month">Bulan</button>
+          <button data-p="year">Tahun</button>
+        </div>
+        <div class="navper">
+          <button class="btn small" id="prevPer">◀</button>
+          <b id="perLabel"></b>
+          <button class="btn small" id="nextPer">▶</button>
+        </div>
+        <canvas id="chart" height="240"></canvas>
+        <div class="legend"><span class="g"></span>≥80% <span class="y"></span>50–79% <span class="r"></span>&lt;50% <span class="n"></span>belum diisi</div>
+        <div class="summary" id="summary"></div>
+      </div>
+      <div class="card">
+        <h2>📊 Tabel Perkembangan</h2>
+        <div class="tablewrap"><table id="statTable"></table></div>
+      </div>
+    </section>
+
+    <!-- ================= ATUR ================= -->
+    <section id="tab-settings" class="tab">
+      <div class="card">
+        <h2>👤 Nama</h2>
+        <input type="text" id="userName" placeholder="Nama kamu">
+      </div>
+      <div class="card">
+        <h2>📝 Kegiatan Checklist</h2>
+        <p class="hint">Tambah, hapus, atau urutkan kegiatanmu sendiri.</p>
+        <ul class="tasks" id="taskEdit"></ul>
+        <div class="form inline">
+          <input type="text" id="newTaskIcon" maxlength="2" placeholder="🙂" class="emoji">
+          <input type="text" id="newTask" placeholder="mis. Push up 20x">
+          <button class="btn primary" id="addTask">➕</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>💾 Cadangan Data</h2>
+        <p class="hint">Data disimpan di HP ini. Simpan cadangan sesekali supaya tidak hilang.</p>
+        <div class="row">
+          <button class="btn" id="exportData">⬇️ Ekspor</button>
+          <label class="btn">⬆️ Impor<input type="file" id="importData" accept="application/json" hidden></label>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom">
+    <button data-tab="today" class="on">✅<span>Hari Ini</span></button>
+    <button data-tab="alarms">⏰<span>Pengingat</span></button>
+    <button data-tab="stats">📈<span>Perkembangan</span></button>
+    <button data-tab="settings">⚙️<span>Atur</span></button>
+  </nav>
+
+  <!-- Overlay alarm -->
+  <div id="ring" class="ring hidden">
+    <div class="ringbox">
+      <div class="ringtime" id="ringTime">05:00</div>
+      <div class="ringlabel" id="ringLabel">Bangun!</div>
+      <div id="mathBox" class="hidden">
+        <div class="mathq" id="mathQ"></div>
+        <input type="number" inputmode="numeric" id="mathA" placeholder="Jawaban">
+      </div>
+      <button class="btn primary big" id="dismiss">Aku sudah bangun 💪</button>
+      <button class="btn" id="snooze">Tunda 5 menit (maks 1x)</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="app.js"></script>
+</body>
+</html>
