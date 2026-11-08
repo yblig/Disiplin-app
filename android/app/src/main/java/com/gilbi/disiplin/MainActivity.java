@@ -32,12 +32,19 @@ public class MainActivity extends Activity {
                 .build();
 
         web = new WebView(this);
+        web.setHorizontalScrollBarEnabled(false);
+        web.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
         s.setDatabaseEnabled(true);
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setAllowFileAccess(false);
+        s.setUseWideViewPort(true);        // pakai <meta viewport> -> lebar = lebar layar
+        s.setLoadWithOverviewMode(true);
+        s.setSupportZoom(false);
+        // huruf HP besar tetap dihormati, tapi dibatasi supaya tampilan tidak meluber
+        s.setTextZoom(Math.max(85, Math.min(s.getTextZoom(), 120)));
 
         web.setWebViewClient(new WebViewClient() {
             @Override

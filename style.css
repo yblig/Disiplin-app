@@ -119,3 +119,44 @@ nav.bottom button.on { color: var(--accent); }
 .pk-info { flex: 1; min-width: 0; }
 .pk-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picklist .d { color: var(--muted); font-size: .78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== Responsif: tidak boleh lebih lebar dari layar (juga saat huruf HP diperbesar) ===== */
+html, body { max-width: 100%; overflow-x: hidden; }
+main, .card, .tab { min-width: 0; max-width: 100%; }
+h2, h3, .name, .info, .pk-info, .hint, .score, .quote, td, th { overflow-wrap: anywhere; word-break: break-word; }
+input, select, button { max-width: 100%; min-width: 0; }
+.top { gap: 10px; }
+.top > div:first-child { min-width: 0; }
+.hello { font-size: clamp(1rem, 5vw, 1.3rem); overflow-wrap: anywhere; }
+.streak { flex-shrink: 0; }
+
+/* checklist: tombol Ya/Tidak turun ke bawah kalau tidak muat */
+.checklist li { flex-wrap: wrap; }
+.checklist .name { flex: 1 1 120px; min-width: 0; }
+.yn { margin-left: auto; flex-shrink: 0; }
+.yn button { padding: 8px 12px; }
+
+/* daftar alarm: jam + info di atas, tombol ikut menyesuaikan */
+.alarms li { flex-wrap: wrap; gap: 6px 10px; }
+.alarms .t { min-width: 0; font-size: clamp(1.15rem, 6vw, 1.5rem); }
+.alarms .info { flex: 1 1 110px; min-width: 0; }
+.alarms li.editor { flex-basis: 100%; }
+
+.days { gap: 3px; }
+.days button { min-width: 0; padding: 8px 0; font-size: clamp(.62rem, 3.2vw, .85rem); }
+.row .btn { min-width: 0; flex: 1 1 120px; white-space: normal; }
+.vol { gap: 8px; }
+.vol input { min-width: 0; }
+.vol span { min-width: 0; flex-shrink: 0; font-size: clamp(1rem, 5vw, 1.3rem); }
+.form.inline { grid-template-columns: 48px minmax(0, 1fr) auto; }
+.summary { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.summary b { font-size: clamp(1rem, 5vw, 1.3rem); }
+.navper b { text-align: center; flex: 1; min-width: 0; font-size: clamp(.8rem, 4vw, 1rem); }
+.seg button { min-width: 0; padding: 8px 4px; }
+nav.bottom button { min-width: 0; }
+nav.bottom button span { font-size: clamp(.55rem, 2.8vw, .7rem); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picklist li { flex-wrap: wrap; }
+.pk-info { flex: 1 1 120px; }
+.ringtime { font-size: clamp(3rem, 20vw, 4.5rem); }
+.tablewrap { max-width: 100%; }
+.alarms .edit { margin-left: auto; }
