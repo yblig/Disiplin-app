@@ -12,7 +12,12 @@ Aplikasi web (PWA) untuk membangun kebiasaan disiplin: pengingat super keras, ch
 - **Perkembangan** — grafik batang + tabel keberhasilan per kegiatan untuk minggu, bulan, dan tahun; streak 🔥 hari beruntun skor ≥ 80%.
 - **Offline & data di HP** — tersimpan di perangkat, ada ekspor/impor cadangan.
 
-## Cara pakai
+## 📱 APK Android (disarankan — alarm asli)
+Download **Disiplin.apk** dari https://github.com/yblig/Disiplin-app/releases/tag/apk-latest, buka di HP, izinkan "Instal dari sumber tidak dikenal".
+Di versi APK alarm dijadwalkan oleh Android (AlarmManager): tetap bunyi walau aplikasi ditutup, HP dikunci, atau habis restart; volume alarm HP dinaikkan ke maksimal lalu di-boost lagi (LoudnessEnhancer) sesuai slider sampai 800%.
+Setiap push otomatis membangun APK baru lewat GitHub Actions (`.github/workflows/android.yml`). Kode Android ada di folder `android/`.
+
+## Cara pakai (versi web)
 1. Hosting folder ini (mis. aktifkan **GitHub Pages** di Settings → Pages → branch ini → root), atau jalankan lokal: `python3 -m http.server` lalu buka `http://localhost:8000`.
 2. Buka di HP (Chrome Android disarankan) → menu ⋮ → **Tambahkan ke layar utama**.
 3. Tab **Pengingat** → *Izinkan Notifikasi*, atur volume, tes suara.
