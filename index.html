@@ -49,6 +49,14 @@
 
     <!-- ================= PENGINGAT ================= -->
     <section id="tab-alarms" class="tab">
+      <div class="card warn hidden" id="nativeCard">
+        <b>Izin supaya alarm PASTI bunyi</b>
+        <p class="hint">Alarm dijalankan Android, jadi tetap bunyi walau aplikasi ditutup, HP dikunci, atau habis restart. Pastikan semua izin di bawah ✅.</p>
+        <ul class="checklist" id="permList"></ul>
+        <p class="hint" id="nextAlarm"></p>
+        <button class="btn primary big" id="testAlarm">🧪 Tes alarm 1 menit lagi</button>
+      </div>
+
       <div class="card warn" id="permCard">
         <b>Penting supaya pengingat bunyi:</b>
         <ol>

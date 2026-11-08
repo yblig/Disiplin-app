@@ -1,0 +1,61 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Aplikasi web (index.html, app.js, style.css, ...) di root repo disalin ke assets/www
+def wwwDir = new File(project.buildDir, 'generated/www')
+
+tasks.register('copyWeb', Copy) {
+    from(new File(rootDir, '..')) {
+        include 'index.html', 'style.css', 'app.js', 'manifest.json', 'sw.js', 'icons/**'
+    }
+    into new File(wwwDir, 'www')
+}
+
+android {
+    namespace 'com.gilbi.disiplin'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.gilbi.disiplin'
+        minSdk 26
+        targetSdk 34
+        versionCode((System.getenv('GITHUB_RUN_NUMBER') ?: '1').toInteger())
+        versionName "1.0." + (System.getenv('GITHUB_RUN_NUMBER') ?: '0')
+    }
+
+    // Kunci tetap supaya update APK bisa dipasang di atas versi lama (data tidak hilang)
+    signingConfigs {
+        shared {
+            storeFile file('../disiplin.keystore')
+            storePassword 'disiplin123'
+            keyAlias 'disiplin'
+            keyPassword 'disiplin123'
+        }
+    }
+
+    buildTypes {
+        debug { signingConfig signingConfigs.shared }
+        release {
+            signingConfig signingConfigs.shared
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main { assets.srcDir(wwwDir) }
+    }
+
+    lint { abortOnError false; checkReleaseBuilds false }
+}
+
+tasks.named('preBuild') { dependsOn 'copyWeb' }
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

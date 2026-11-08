@@ -66,7 +66,17 @@ function defaults() {
 let S;
 try { S = Object.assign(defaults(), JSON.parse(localStorage.getItem(STORE) || '{}')); }
 catch { S = defaults(); }
-const save = () => localStorage.setItem(STORE, JSON.stringify(S));
+// Di dalam APK Android, alarm dijalankan oleh sistem (AlarmManager) lewat jembatan ini.
+const NATIVE = window.DisiplinNative || null;
+let lastSynced = '';
+function syncNative() {
+  if (!NATIVE) return;
+  const cfg = JSON.stringify({ alarms: S.alarms, volume: S.volume, sound: S.sound, mathLock: S.mathLock, vibrate: S.vibrate });
+  if (cfg === lastSynced) return;
+  lastSynced = cfg;
+  try { NATIVE.syncConfig(cfg); } catch (e) {}
+}
+const save = () => { localStorage.setItem(STORE, JSON.stringify(S)); syncNative(); };
 
 // ---------- IndexedDB untuk file suara ----------
 function idb() {
@@ -279,6 +289,7 @@ function renderAlarms() {
     del.onclick = () => { if (confirm('Hapus pengingat ini?')) { S.alarms = S.alarms.filter(x => x !== a); save(); renderAlarms(); } };
     li.append(sw, del); ul.append(li);
   });
+  if (NATIVE) setTimeout(renderNative, 50);
 }
 
 const newDays = new Set(ALL_DAYS);
@@ -314,6 +325,10 @@ $('#customFile').onchange = async ev => {
   const f = ev.target.files[0]; if (!f) return;
   try {
     await idbPut('custom', f);
+    if (NATIVE) {
+      const b64 = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(f); });
+      if (!NATIVE.saveCustomSound(b64)) throw new Error('native');
+    }
     S.customName = f.name; save();
     Sound.customBuf = null; await Sound.loadCustom();
     $('#customName').textContent = 'Dipilih: ' + f.name; toast('Suara tersimpan 🎵');
@@ -321,8 +336,55 @@ $('#customFile').onchange = async ev => {
 };
 $('#mathLock').checked = S.mathLock; $('#mathLock').onchange = ev => { S.mathLock = ev.target.checked; save(); };
 $('#vibrate').checked = S.vibrate; $('#vibrate').onchange = ev => { S.vibrate = ev.target.checked; save(); };
-$('#testSound').onclick = () => { Sound.play(); setTimeout(() => Sound.stop(), 5000); };
-$('#stopSound').onclick = () => Sound.stop();
+$('#testSound').onclick = () => {
+  if (NATIVE) { syncNative(); NATIVE.testSound(); return; }
+  Sound.play(); setTimeout(() => Sound.stop(), 5000);
+};
+$('#stopSound').onclick = () => { if (NATIVE) NATIVE.stopSound(); else Sound.stop(); };
+
+// ---------- Mode APK: status izin Android ----------
+const PERMS = [
+  ['notif', '🔔 Notifikasi'],
+  ['exact', '⏱️ Alarm tepat waktu'],
+  ['fullscreen', '📱 Layar alarm penuh (di atas layar kunci)'],
+  ['battery', '🔋 Jangan dibatasi penghemat baterai'],
+];
+function renderNative() {
+  if (!NATIVE) return;
+  $('#permCard').classList.add('hidden');
+  $('#nativeCard').classList.remove('hidden');
+  let st = {};
+  try { st = JSON.parse(NATIVE.permissionStatus()); } catch (e) {}
+  const ul = $('#permList'); ul.innerHTML = '';
+  PERMS.forEach(([k, name]) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="name">${name}</span>`;
+    const b = document.createElement('button');
+    b.className = 'btn small' + (st[k] ? '' : ' primary');
+    b.textContent = st[k] ? '✅ OK' : 'Izinkan';
+    b.onclick = () => NATIVE.openPermission(k);
+    li.append(b); ul.append(li);
+  });
+  const next = Number(NATIVE.nextAlarm());
+  $('#nextAlarm').textContent = next > 0
+    ? 'Alarm berikutnya: ' + new Date(next).toLocaleString('id-ID', { weekday: 'long', hour: '2-digit', minute: '2-digit' })
+    : 'Belum ada alarm aktif.';
+}
+window.onNativeResume = () => {
+  if (!NATIVE) return;
+  // alarm "sekali" yang sudah berbunyi dimatikan oleh sistem -> ikuti di sini
+  try {
+    const cfg = JSON.parse(NATIVE.getConfig());
+    (cfg.alarms || []).forEach(na => { const a = S.alarms.find(x => x.id === na.id); if (a && a.on && na.on === false) a.on = false; });
+    localStorage.setItem(STORE, JSON.stringify(S));
+    lastSynced = ''; syncNative();
+  } catch (e) {}
+  renderAlarms(); renderNative(); renderToday();
+};
+$('#testAlarm').onclick = () => {
+  syncNative(); NATIVE.testAlarm(60);
+  toast('Alarm tes akan bunyi 1 menit lagi. Coba kunci HP-nya sekarang 🔒');
+};
 
 // izin notifikasi & wake lock
 let swReg = null;
@@ -355,7 +417,7 @@ let ringing = null;     // alarm aktif
 let mathAnswer = 0;
 
 function checkAlarms() {
-  if (ringing) return;
+  if (ringing || NATIVE) return; // di APK, alarm ditangani Android
   const now = new Date();
   const hm = `${pad(now.getHours())}:${pad(now.getMinutes())}`;
   const dk = dkey(now);
@@ -434,6 +496,7 @@ $('#userName').value = S.name;
 $('#userName').oninput = ev => { S.name = ev.target.value; save(); renderToday(); };
 
 $('#exportData').onclick = () => {
+  if (NATIVE) return NATIVE.saveFile(`disiplin-backup-${today()}.json`, JSON.stringify(S, null, 2));
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([JSON.stringify(S, null, 2)], { type: 'application/json' }));
   a.download = `disiplin-backup-${today()}.json`; a.click();
@@ -571,4 +634,4 @@ setInterval(() => { if (today() !== lastDay) { lastDay = today(); renderToday();
 
 // ---------- start ----------
 save();
-renderToday(); renderAlarms(); renderNewDays(); renderTaskEdit(); renderNotifBtn(); renderWake();
+renderToday(); renderAlarms(); renderNewDays(); renderTaskEdit(); renderNotifBtn(); renderWake(); renderNative();
