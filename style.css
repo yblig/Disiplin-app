@@ -159,4 +159,9 @@ nav.bottom button span { font-size: clamp(.55rem, 2.8vw, .7rem); overflow: hidde
 .pk-info { flex: 1 1 120px; }
 .ringtime { font-size: clamp(3rem, 20vw, 4.5rem); }
 .tablewrap { max-width: 100%; }
-.alarms .edit { margin-left: auto; }
+.alarms .ctl { display: flex; align-items: center; gap: 4px; margin-left: auto; flex-shrink: 0; }
+
+.sleepcard.sleeping { background: linear-gradient(135deg, #1e1b4b, #312e81); color: #e0e7ff; }
+.sleepcard.sleeping .hint { color: #c7d2fe; }
+.sleepcard.sleeping .btn { background: rgba(255,255,255,.12); color: #fff; border-color: rgba(255,255,255,.3); }
+.alarms .skip { color: #6366f1; font-size: .78rem; font-weight: 700; }

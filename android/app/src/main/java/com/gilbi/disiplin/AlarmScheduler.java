@@ -102,14 +102,18 @@ public final class AlarmScheduler {
         Set<String> scheduled = new HashSet<>();
         long earliest = Long.MAX_VALUE;
         try {
-            JSONArray alarms = config(c).optJSONArray("alarms");
+            JSONObject cfg = config(c);
+            JSONArray alarms = cfg.optJSONArray("alarms");
             if (alarms != null) {
                 long now = System.currentTimeMillis();
+                long sleepUntil = cfg.optLong("sleepUntil", 0); // mode tidur: lewati semua sebelum jam ini
                 for (int i = 0; i < alarms.length(); i++) {
                     JSONObject a = alarms.getJSONObject(i);
                     if (!a.optBoolean("on", true)) continue;
                     String id = a.optString("id"), time = a.optString("time");
-                    long at = nextTrigger(time, a.optJSONArray("days"), now);
+                    // lewati sekali (skipUntil) & mode tidur
+                    long after = Math.max(now + 1000, Math.max(a.optLong("skipUntil", 0), sleepUntil - 1));
+                    long at = nextTrigger(time, a.optJSONArray("days"), after);
                     if (at <= 0) continue;
                     int req = reqCode(id);
                     setExact(c, am, at, firePi(c, req, id, a.optString("label", "Pengingat!"), time, false));
@@ -122,20 +126,20 @@ public final class AlarmScheduler {
                 .putLong("next", earliest == Long.MAX_VALUE ? 0 : earliest).apply();
     }
 
-    /** Waktu berikutnya (ms) untuk jam "HH:MM" pada hari yang dipilih (0=Minggu). Kosong = hari apa saja. */
-    static long nextTrigger(String hm, JSONArray days, long now) {
+    /** Waktu berikutnya (ms, > after) untuk jam "HH:MM" pada hari yang dipilih (0=Minggu). Kosong = hari apa saja. */
+    static long nextTrigger(String hm, JSONArray days, long after) {
         try {
             String[] parts = hm.split(":");
             int h = Integer.parseInt(parts[0]), m = Integer.parseInt(parts[1]);
             for (int add = 0; add <= 7; add++) {
                 Calendar cal = Calendar.getInstance();
-                cal.setTimeInMillis(now);
+                cal.setTimeInMillis(after);
                 cal.add(Calendar.DAY_OF_YEAR, add);
                 cal.set(Calendar.HOUR_OF_DAY, h);
                 cal.set(Calendar.MINUTE, m);
                 cal.set(Calendar.SECOND, 0);
                 cal.set(Calendar.MILLISECOND, 0);
-                if (cal.getTimeInMillis() <= now + 1000) continue;
+                if (cal.getTimeInMillis() <= after) continue;
                 int dow = cal.get(Calendar.DAY_OF_WEEK) - 1; // 0 = Minggu
                 if (days == null || days.length() == 0) return cal.getTimeInMillis();
                 for (int j = 0; j < days.length(); j++) if (days.optInt(j, -1) == dow) return cal.getTimeInMillis();

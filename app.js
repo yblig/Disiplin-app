@@ -71,7 +71,7 @@ const NATIVE = window.DisiplinNative || null;
 let lastSynced = '';
 function syncNative() {
   if (!NATIVE) return;
-  const cfg = JSON.stringify({ alarms: S.alarms, volume: S.volume, sound: S.sound, mathLock: S.mathLock, vibrate: S.vibrate });
+  const cfg = JSON.stringify({ alarms: S.alarms, volume: S.volume, sound: S.sound, mathLock: S.mathLock, vibrate: S.vibrate, sleepUntil: S.sleepUntil || 0 });
   if (cfg === lastSynced) return;
   lastSynced = cfg;
   try { NATIVE.syncConfig(cfg); } catch (e) {}
@@ -87,6 +87,64 @@ const effSound = a => (a && a.sound && a.sound !== 'default') ? a.sound : S.soun
 const effVol = a => (a && a.volume) ? a.volume : S.volume;
 const effKey = a => (a && a.sound === 'custom') ? a.id : 'default';
 const SOUND_NAMES = { siren: '🚨 Sirine', beep: '⏰ Beep', rooster: '🐓 Kokok', custom: '🎵 Dari HP' };
+
+// ---------- Lewati alarm ----------
+/** Kemunculan alarm berikutnya yang waktunya > after (ms). */
+function nextOcc(a, after) {
+  const [h, m] = a.time.split(':').map(Number);
+  for (let add = 0; add <= 8; add++) {
+    const d = new Date(after); d.setDate(d.getDate() + add); d.setHours(h, m, 0, 0);
+    if (d.getTime() <= after) continue;
+    if (!a.days.length || a.days.includes(d.getDay())) return d.getTime();
+  }
+  return 0;
+}
+/** Kapan alarm ini benar-benar akan bunyi (memperhitungkan lewati sekali & mode tidur). */
+function effectiveNext(a) {
+  return nextOcc(a, Math.max(Date.now(), a.skipUntil || 0, (S.sleepUntil || 0) - 1));
+}
+function whenText(t) {
+  const d = new Date(t), now = new Date();
+  const tom = new Date(); tom.setDate(now.getDate() + 1);
+  const hm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  if (dkey(d) === dkey(now)) return 'hari ini ' + hm;
+  if (dkey(d) === dkey(tom)) return 'besok ' + hm;
+  return `${DAYS_FULL[d.getDay()]} ${hm}`;
+}
+function renderAll() { renderAlarms(); renderSleep(); }
+
+function renderSleep() {
+  const now = Date.now();
+  if (S.sleepUntil && S.sleepUntil <= now) { S.sleepUntil = 0; save(); }
+  document.querySelectorAll('[data-sleep]').forEach(el => {
+    if (S.sleepUntil) {
+      const skipped = S.alarms.filter(a => { if (!a.on) return false; const t = nextOcc(a, Math.max(now, a.skipUntil || 0)); return t && t < S.sleepUntil; });
+      el.classList.add('sleeping');
+      el.innerHTML = `<h2>😴 Mode tidur aktif</h2>
+        <p class="hint">${skipped.length} alarm dilewati sampai <b>${whenText(S.sleepUntil)}</b>. Alarm bangun tetap bunyi. Selamat tidur${S.name ? ', ' + esc(S.name) : ''}! 🌙</p>
+        <button class="btn big s-cancel">↩️ Batalkan mode tidur</button>`;
+      el.querySelector('.s-cancel').onclick = () => { S.sleepUntil = 0; save(); renderAll(); toast('Mode tidur dibatalkan, semua alarm aktif lagi'); };
+      return;
+    }
+    el.classList.remove('sleeping');
+    // pilihan: alarm-alarm berikutnya dalam 36 jam
+    const opts = S.alarms.filter(a => a.on).map(a => ({ a, t: nextOcc(a, Math.max(now, a.skipUntil || 0)) }))
+      .filter(o => o.t && o.t - now < 36 * 3600e3).sort((x, y) => x.t - y.t);
+    if (!opts.length) { el.innerHTML = '<h2>😴 Tidur lebih awal?</h2><p class="hint">Tidak ada alarm aktif dalam 36 jam ke depan.</p>'; return; }
+    const morning = opts.find(o => { const h = new Date(o.t).getHours(); return h >= 3 && h <= 10; }) || opts[opts.length - 1];
+    el.innerHTML = `<h2>😴 Tidur lebih awal?</h2>
+      <p class="hint">Lewati semua alarm sampai alarm bangunmu, biar tidak kebangun karena alarm lain.</p>
+      <label class="lbl">Bangunkan aku dengan alarm</label>
+      <select class="s-wake">${opts.map(o => `<option value="${o.t}"${o === morning ? ' selected' : ''}>${whenText(o.t)} — ${esc(o.a.label)}</option>`).join('')}</select>
+      <button class="btn primary big s-go">😴 Aku tidur sekarang</button>`;
+    el.querySelector('.s-go').onclick = () => {
+      S.sleepUntil = +el.querySelector('.s-wake').value;
+      save(); renderAll();
+      toast(`Selamat tidur! 🌙 Alarm berikutnya: ${whenText(S.sleepUntil)}`);
+    };
+  });
+}
+setInterval(() => { if (S.sleepUntil && S.sleepUntil <= Date.now()) renderAll(); }, 30000);
 S.alarms.forEach(a => { if (!a.sound) a.sound = 'default'; if (a.volume === undefined) a.volume = null; });
 
 // ---------- IndexedDB untuk file suara ----------
@@ -288,6 +346,15 @@ function renderStreak() {
 }
 
 // ---------- PENGINGAT ----------
+function skipInfo(a) {
+  if (!a.on) return '';
+  const now = Date.now();
+  const raw = nextOcc(a, now);
+  const real = effectiveNext(a);
+  if (!raw || raw === real) return '';
+  const why = raw < (S.sleepUntil || 0) ? '😴 Mode tidur' : '⏭️ Dilewati sekali';
+  return `<div class="skip">${why} · bunyi lagi ${real ? whenText(real) : '-'}</div>`;
+}
 let openAlarm = null;
 function renderAlarms() {
   const ul = $('#alarmList'); ul.innerHTML = '';
@@ -296,14 +363,26 @@ function renderAlarms() {
     const days = a.days.length === 7 ? 'Setiap hari' : a.days.length ? a.days.slice().sort().map(d => DAYS[d]).join(', ') : 'Sekali';
     const snd = effSound(a) === 'custom' ? '🎵 ' + (a.sound === 'custom' ? (a.customName || 'Dari HP') : (S.customName || 'Dari HP')) : SOUND_NAMES[effSound(a)];
     li.innerHTML = `<div class="t">${a.time}</div><div class="info"><div>${esc(a.label)}</div><div class="d">${days}</div>
-      <div class="snd">${esc(snd)} · 🔊 ${volText(effVol(a))}${a.sound === 'default' && !a.volume ? ' (umum)' : ''}</div></div>`;
+      <div class="snd">${esc(snd)} · 🔊 ${volText(effVol(a))}${a.sound === 'default' && !a.volume ? ' (umum)' : ''}</div>${skipInfo(a)}</div>`;
+    const sk = document.createElement('button'); sk.className = 'edit'; sk.title = 'Lewati sekali';
+    const skipping = (a.skipUntil || 0) > Date.now();
+    sk.textContent = skipping ? '↩️' : '⏭️';
+    sk.classList.toggle('hidden', !a.on);
+    sk.onclick = () => {
+      if (skipping) { a.skipUntil = 0; save(); renderAll(); toast('Alarm ' + a.time + ' tidak dilewati lagi'); return; }
+      const t = effectiveNext(a); if (!t) return;
+      a.skipUntil = t; save(); renderAll();
+      const after = effectiveNext(a);
+      toast(`Alarm ${whenText(t)} dilewati ⏭️` + (after ? ` · bunyi lagi ${whenText(after)}` : ''));
+    };
     const ed = document.createElement('button'); ed.className = 'edit'; ed.textContent = openAlarm === a.id ? '✖️' : '✏️';
     ed.onclick = () => { openAlarm = openAlarm === a.id ? null : a.id; renderAlarms(); };
     const sw = document.createElement('button'); sw.className = 'switch' + (a.on ? ' on' : '');
     sw.onclick = () => { a.on = !a.on; save(); renderAlarms(); };
     const del = document.createElement('button'); del.className = 'del'; del.textContent = '🗑️';
     del.onclick = () => { if (confirm('Hapus pengingat ini?')) { S.alarms = S.alarms.filter(x => x !== a); save(); renderAlarms(); } };
-    li.append(ed, sw, del); ul.append(li);
+    const ctl = document.createElement('div'); ctl.className = 'ctl'; ctl.append(ed, sk, sw, del);
+    li.append(ctl); ul.append(li);
     if (openAlarm === a.id) ul.append(alarmEditor(a));
   });
   if (NATIVE) setTimeout(renderNative, 50);
@@ -531,7 +610,7 @@ window.onNativeResume = () => {
     localStorage.setItem(STORE, JSON.stringify(S));
     lastSynced = ''; syncNative();
   } catch (e) {}
-  renderAlarms(); renderNative(); renderToday();
+  renderAlarms(); renderNative(); renderToday(); renderSleep();
 };
 $('#testAlarm').onclick = () => {
   syncNative(); NATIVE.testAlarm(60);
@@ -575,6 +654,8 @@ function checkAlarms() {
   const dk = dkey(now);
   for (const a of S.alarms) {
     if (!a.on || a.time !== hm) continue;
+    const occ = new Date(now); occ.setSeconds(0, 0);
+    if (occ.getTime() <= (a.skipUntil || 0) || occ.getTime() < (S.sleepUntil || 0)) continue; // dilewati
     if (a.days.length && !a.days.includes(now.getDay())) continue;
     const key = `${dk} ${a.time} ${a.id}`;
     if (fired.has(key)) continue;
@@ -786,4 +867,4 @@ setInterval(() => { if (today() !== lastDay) { lastDay = today(); renderToday();
 
 // ---------- start ----------
 save();
-renderToday(); renderAlarms(); renderNewDays(); renderTaskEdit(); renderNotifBtn(); renderWake(); renderNative();
+renderToday(); renderAlarms(); renderNewDays(); renderTaskEdit(); renderNotifBtn(); renderWake(); renderNative(); renderSleep();
