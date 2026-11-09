@@ -71,7 +71,8 @@ const NATIVE = window.DisiplinNative || null;
 let lastSynced = '';
 function syncNative() {
   if (!NATIVE) return;
-  const cfg = JSON.stringify({ alarms: S.alarms, volume: S.volume, sound: S.sound, mathLock: S.mathLock, vibrate: S.vibrate, sleepUntil: S.sleepUntil || 0 });
+  const cfg = JSON.stringify({ alarms: S.alarms, volume: S.volume, sound: S.sound, mathLock: S.mathLock, vibrate: S.vibrate, sleepUntil: S.sleepUntil || 0,
+    challenge: S.challenge || (S.mathLock ? 'math' : 'none'), wallKind: S.wallMode === 'custom' ? (S.wallKind || 'image') : 'none', wallName: S.wallName || '' });
   if (cfg === lastSynced) return;
   lastSynced = cfg;
   try { NATIVE.syncConfig(cfg); } catch (e) {}
@@ -139,6 +140,7 @@ function renderSleep() {
       <button class="btn primary big s-go">😴 Aku tidur sekarang</button>`;
     el.querySelector('.s-go').onclick = () => {
       S.sleepUntil = +el.querySelector('.s-wake').value;
+      (S.sleeps = S.sleeps || []).push({ start: Date.now(), until: S.sleepUntil }); S.sleeps = S.sleeps.slice(-400);
       save(); renderAll();
       toast(`Selamat tidur! 🌙 Alarm berikutnya: ${whenText(S.sleepUntil)}`);
     };
@@ -247,7 +249,8 @@ const Sound = {
 $$('nav.bottom button').forEach(b => b.onclick = () => {
   $$('nav.bottom button').forEach(x => x.classList.toggle('on', x === b));
   $$('.tab').forEach(t => t.classList.toggle('active', t.id === 'tab-' + b.dataset.tab));
-  if (b.dataset.tab === 'stats') renderStats();
+  if (b.dataset.tab === 'stats') { renderStats(); if (typeof renderProgressExtra === 'function') renderProgressExtra(); }
+  if (b.dataset.tab === 'health' && typeof renderHealth === 'function') renderHealth();
   window.scrollTo(0, 0);
 });
 
@@ -264,7 +267,9 @@ const QUOTES = [
 
 function today() { return dkey(new Date()); }
 function dayEntry(k) {
-  if (!S.log[k]) S.log[k] = { answers: {}, meals: {}, snackNote: '', saved: false };
+  if (!S.log[k]) S.log[k] = { answers: {}, meals: {}, snacks: [], saved: false };
+  const e = S.log[k];
+  if (!e.snacks) { e.snacks = e.snackNote ? [{ id: uid(), name: e.snackNote, qty: 1, kcal: 0, t: e.savedAt || Date.now() }] : []; }
   return S.log[k];
 }
 
@@ -280,7 +285,8 @@ function renderToday() {
   const now = new Date();
   $('#hello').textContent = `Halo, ${S.name || 'kamu'}! 👋`;
   $('#todayLabel').textContent = `${DAYS_FULL[now.getDay()]}, ${now.getDate()} ${MONTHS_FULL[now.getMonth()]} ${now.getFullYear()}`;
-  $('#quote').textContent = '“' + QUOTES[(now.getDate() + now.getMonth()) % QUOTES.length] + '”';
+  const QS = QUOTES.concat(S.quotes || []);
+  $('#quote').textContent = '“' + QS[(now.getDate() * 7 + now.getMonth()) % QS.length] + '”';
   const e = dayEntry(today());
 
   const ul = $('#checklist'); ul.innerHTML = '';
@@ -299,13 +305,12 @@ function renderToday() {
     li.append(ynButtons(e.meals[m.id], v => { e.meals[m.id] = v; e.saved = false; save(); renderToday(); }));
     ml.append(li);
   });
-  $('#snackNoteWrap').classList.toggle('hidden', e.meals.noSnack !== false);
-  $('#snackNote').value = e.snackNote || '';
+  if (typeof renderSnacks === 'function') renderSnacks(e);
   $('#honestPledge').checked = !!e.saved;
   showScore(e);
   renderStreak();
+  if (typeof renderHeader === 'function') renderHeader();
 }
-$('#snackNote').oninput = ev => { dayEntry(today()).snackNote = ev.target.value; save(); };
 
 function scoreOf(e) {
   const vals = Object.values(e.answers).map(a => a.v).concat(MEALS.map(m => e.meals[m.id]));
@@ -333,6 +338,7 @@ $('#saveDay').onclick = () => {
   const keep = {}; S.tasks.forEach(t => keep[t.id] = e.answers[t.id]); e.answers = keep;
   e.score = scoreOf(e); e.saved = true; e.savedAt = Date.now();
   save(); renderToday(); toast('Tersimpan! Terima kasih sudah jujur 🙌');
+  if (typeof onDaySaved === 'function') onDaySaved(e);
 };
 
 function renderStreak() {
@@ -342,6 +348,7 @@ function renderStreak() {
     const e = S.log[dkey(d)];
     if (e && e.saved && e.score >= 80) { n++; d.setDate(d.getDate() - 1); } else break;
   }
+  renderStreak.n = n;
   $('#streak').textContent = '🔥 ' + n;
 }
 
@@ -413,6 +420,22 @@ function alarmEditor(a) {
       row.textContent = `${snd} · 🔊 ${volText(effVol(a))}${a.sound === 'default' && !a.volume ? ' (umum)' : ''}`;
     }
   }));
+  if (typeof wallEditor === 'function') {
+    const h = document.createElement('label'); h.className = 'lbl'; h.textContent = '🖼️ Wallpaper layar alarm'; li.append(h);
+    li.append(wallEditor(a, a.id, true, () => {}));
+  }
+  const gr = document.createElement('label'); gr.className = 'honest';
+  gr.innerHTML = `<input type="checkbox" ${a.gradual ? 'checked' : ''}> 📈 Volume naik bertahap (30 detik pertama)`;
+  gr.querySelector('input').onchange = ev => { a.gradual = ev.target.checked; save(); };
+  li.append(gr);
+  const dup = document.createElement('button'); dup.className = 'btn'; dup.style.width = '100%'; dup.style.marginTop = '8px'; dup.textContent = '📄 Duplikat alarm ini';
+  dup.onclick = () => {
+    const c = JSON.parse(JSON.stringify(a)); c.id = uid(); c.label = a.label + ' (salinan)'; c.skipUntil = 0;
+    if (c.sound === 'custom') { c.sound = 'default'; c.customName = ''; }
+    if (c.wall === 'custom') { c.wall = 'default'; c.wallName = ''; }
+    S.alarms.push(c); openAlarm = c.id; save(); renderAlarms(); toast('Alarm diduplikat (suara/wallpaper khusus diatur ulang)');
+  };
+  li.append(dup);
   const done = document.createElement('button'); done.className = 'btn primary big'; done.textContent = '✔️ Selesai';
   done.onclick = () => { openAlarm = null; renderAlarms(); };
   li.append(done);
@@ -477,12 +500,24 @@ function soundEditor(t, key, isAlarm, onChange = () => {}) {
 // ---------- Pemilih lagu/video dari HP (APK): cari otomatis, tanpa cari folder ----------
 let pickState = null, mediaCache = null, previewing = null;
 function fmtDur(ms) { if (!ms) return ''; const s = Math.round(ms / 1000); return `${Math.floor(s / 60)}:${pad(s % 60)}`; }
-function openPicker(key, onDone) {
-  pickState = { key, onDone, kind: (pickState && pickState.kind) || 'all', busy: false };
+const PICK_MODES = {
+  sound: { title: 'Pilih lagu / video dari HP', kinds: ['audio', 'video'], tabs: [['all', 'Semua'], ['audio', '🎵 Audio'], ['video', '🎬 Video']] },
+  wall: { title: 'Pilih foto / video untuk wallpaper', kinds: ['image', 'video'], tabs: [['all', 'Semua'], ['image', '🖼️ Foto'], ['video', '🎬 Video']] },
+};
+function openPicker(key, onDone, mode = 'sound') {
+  pickState = { key, onDone, kind: 'all', busy: false, mode };
+  const M = PICK_MODES[mode];
+  $('#pickTitle').textContent = M.title;
+  const seg = $('#pickSeg'); seg.innerHTML = '';
+  M.tabs.forEach(([k, n]) => {
+    const b = document.createElement('button'); b.textContent = n; b.className = k === 'all' ? 'on' : '';
+    b.onclick = () => { seg.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); pickState.kind = k; renderPicker(); };
+    seg.append(b);
+  });
   $('#picker').classList.remove('hidden');
   $('#pickSearch').value = '';
   if (!NATIVE.hasMediaPermission()) {
-    $('#pickInfo').textContent = 'Izinkan akses lagu & video sekali saja, nanti semua file di HP langsung muncul di sini.';
+    $('#pickInfo').textContent = 'Izinkan akses foto, lagu & video sekali saja, nanti semua file di HP langsung muncul di sini.';
     $('#pickList').innerHTML = '';
     $('#pickPerm').classList.remove('hidden');
     return;
@@ -491,7 +526,7 @@ function openPicker(key, onDone) {
   loadMedia();
 }
 function loadMedia() {
-  $('#pickInfo').textContent = '🔎 Mencari semua lagu & video di HP...';
+  $('#pickInfo').textContent = '🔎 Mencari semua file di HP...';
   setTimeout(() => {
     try { mediaCache = JSON.parse(NATIVE.listMedia()).sort((a, b) => b.added - a.added); } catch (e) { mediaCache = []; }
     renderPicker();
@@ -505,18 +540,21 @@ function closePicker() {
 function renderPicker() {
   if (!pickState || !mediaCache) return;
   const q = $('#pickSearch').value.trim().toLowerCase();
-  const list = mediaCache.filter(m => (pickState.kind === 'all' || m.kind === pickState.kind)
+  const M = PICK_MODES[pickState.mode];
+  const pool = mediaCache.filter(m => M.kinds.includes(m.kind));
+  const list = pool.filter(m => (pickState.kind === 'all' || m.kind === pickState.kind)
     && (!q || (m.name + ' ' + m.folder).toLowerCase().includes(q)));
-  const nA = mediaCache.filter(m => m.kind === 'audio').length, nV = mediaCache.length - nA;
-  $('#pickInfo').textContent = mediaCache.length
-    ? `Ditemukan ${nA} audio & ${nV} video. Tampil ${Math.min(list.length, 300)} dari ${list.length}${list.length > 300 ? ' — ketik untuk mencari' : ''}.`
-    : 'Tidak ada lagu/video di HP ini.';
+  const cnt = k => pool.filter(m => m.kind === k).length;
+  const names = { audio: 'audio', video: 'video', image: 'foto' };
+  $('#pickInfo').textContent = pool.length
+    ? `Ditemukan ${M.kinds.map(k => cnt(k) + ' ' + names[k]).join(' & ')}. Tampil ${Math.min(list.length, 300)} dari ${list.length}${list.length > 300 ? ' — ketik untuk mencari' : ''}.`
+    : 'Tidak ada file yang cocok di HP ini.';
   const ul = $('#pickList'); ul.innerHTML = '';
   list.slice(0, 300).forEach(m => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="pk-ic">${m.kind === 'video' ? '🎬' : '🎵'}</span>
+    li.innerHTML = `<span class="pk-ic">${m.kind === 'video' ? '🎬' : m.kind === 'image' ? '🖼️' : '🎵'}</span>
       <div class="pk-info"><div class="pk-name">${esc(m.name)}</div><div class="d">${esc(m.folder || '')}${m.duration ? ' · ' + fmtDur(m.duration) : ''}</div></div>`;
-    const play = document.createElement('button'); play.className = 'btn small'; play.textContent = previewing === m.uri ? '⏹' : '▶';
+    const play = document.createElement('button'); play.className = 'btn small' + (pickState.mode === 'wall' ? ' hidden' : ''); play.textContent = previewing === m.uri ? '⏹' : '▶';
     play.onclick = () => {
       if (previewing === m.uri) { NATIVE.stopPreview(); previewing = null; } else { NATIVE.previewMedia(m.uri); previewing = m.uri; }
       renderPicker();
@@ -525,6 +563,11 @@ function renderPicker() {
     use.onclick = () => {
       if (pickState.busy) return;
       NATIVE.stopPreview(); previewing = null; pickState.busy = true;
+      if (pickState.mode === 'wall') {
+        $('#pickInfo').textContent = '💾 Menyimpan wallpaper...';
+        NATIVE.useWall(pickState.key, m.uri, m.name, m.kind);
+        return;
+      }
       $('#pickInfo').textContent = m.kind === 'video' ? '🎬 Mengubah video jadi suara alarm... tunggu sebentar' : '💾 Menyimpan suara...';
       NATIVE.useMedia(pickState.key, m.uri, m.name, m.kind === 'video');
     };
@@ -543,13 +586,16 @@ window.onNativeMediaUsed = (key, ok, name, converted) => {
   const cb = pickState.onDone; closePicker(); cb(name);
   toast(converted ? 'Video berhasil diubah jadi suara alarm 🎵' : 'Suara alarm tersimpan 🎵');
 };
+window.onNativeWallUsed = (key, ok, name, kind) => {
+  if (!pickState || pickState.key !== key) return;
+  pickState.busy = false;
+  if (!ok) { toast('File ini tidak bisa dipakai, pilih yang lain'); renderPicker(); return; }
+  const cb = pickState.onDone; closePicker(); cb(name, kind);
+  toast('Wallpaper alarm tersimpan 🖼️');
+};
 $('#pickClose').onclick = closePicker;
 $('#pickPerm').onclick = () => NATIVE.requestMediaPermission();
 $('#pickSearch').oninput = renderPicker;
-document.querySelectorAll('#pickSeg button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('#pickSeg button').forEach(x => x.classList.toggle('on', x === b));
-  pickState && (pickState.kind = b.dataset.k); renderPicker();
-});
 
 const newDays = new Set(ALL_DAYS);
 function renderNewDays() {
@@ -611,6 +657,7 @@ window.onNativeResume = () => {
     lastSynced = ''; syncNative();
   } catch (e) {}
   renderAlarms(); renderNative(); renderToday(); renderSleep();
+  if (typeof onResumeExtra === 'function') onResumeExtra();
 };
 $('#testAlarm').onclick = () => {
   syncNative(); NATIVE.testAlarm(60);
@@ -669,18 +716,26 @@ function checkAlarms() {
 }
 setInterval(checkAlarms, 1000);
 
+const PHRASES = ['AKU BANGUN SEKARANG', 'AKU DISIPLIN HARI INI', 'TIDAK ADA SNACK HARI INI', 'AKU PASTI BISA BERUBAH', 'BANGUN DAN GERAK'];
+let typeAnswer = '';
+const chalMath = () => ['math', 'both'].includes(S.challenge || (S.mathLock ? 'math' : 'none'));
+const chalType = () => ['type', 'both'].includes(S.challenge || 'math');
 function ring(time, label, wasSnoozed = false, alarm = null) {
   ringing = { time, label, wasSnoozed, alarm };
   $('#ringTime').textContent = time;
   $('#ringLabel').textContent = label;
   $('#snooze').classList.toggle('hidden', wasSnoozed);
-  if (S.mathLock) {
+  if (typeof showRingWall === 'function') showRingWall(alarm);
+  typeAnswer = PHRASES[Math.floor(Math.random() * PHRASES.length)];
+  $('#typeQ').textContent = typeAnswer; $('#typeA').value = '';
+  $('#typeBox').classList.toggle('hidden', !chalType());
+  if (chalMath()) {
     const a = 12 + Math.floor(Math.random() * 40), b = 3 + Math.floor(Math.random() * 9), c = Math.floor(Math.random() * 50);
     mathAnswer = a * b + c;
     $('#mathQ').textContent = `${a} × ${b} + ${c} = ?`;
     $('#mathA').value = '';
   }
-  $('#mathBox').classList.toggle('hidden', !S.mathLock);
+  $('#mathBox').classList.toggle('hidden', !chalMath());
   $('#ring').classList.remove('hidden');
   Sound.play(effSound(alarm), effVol(alarm), effKey(alarm));
   if (S.vibrate && navigator.vibrate) { navigator.vibrate([800, 300, 800, 300, 800]); ringing.vib = setInterval(() => navigator.vibrate([800, 300, 800]), 2500); }
@@ -695,10 +750,14 @@ function stopRing() {
   if (navigator.vibrate) navigator.vibrate(0);
   ringing = null;
   $('#ring').classList.add('hidden');
+  const v = $('#ringVid'); v.pause(); v.removeAttribute('src');
 }
 $('#dismiss').onclick = () => {
-  if (S.mathLock && +$('#mathA').value !== mathAnswer) { toast('Jawaban salah! Ayo melek dulu 👀'); $('#mathA').value = ''; return; }
+  if (chalMath() && +$('#mathA').value !== mathAnswer) { toast('Jawaban salah! Ayo melek dulu 👀'); $('#mathA').value = ''; return; }
+  if (chalType() && $('#typeA').value.trim().toUpperCase().replace(/\s+/g, ' ') !== typeAnswer) { toast('Kalimatnya belum sama persis ✍️'); return; }
+  const r = ringing;
   stopRing(); toast('Bagus! Langsung gerak, jangan balik ke kasur! 💪');
+  if (typeof logWake === 'function' && r) logWake({ t: Date.now(), time: r.time, label: r.label });
 };
 $('#snooze').onclick = () => {
   if (!ringing) return;
@@ -820,10 +879,19 @@ function renderStats() {
     return `<tr><td>${esc(r.name)}</td><td class="num">${r.yes}/${r.total}</td><td class="num" style="color:${c}">${p}%</td><td><div class="bar"><i style="width:${p}%;background:${c}"></i></div></td></tr>`;
   }).join('');
   // tambahan: daftar snack yang dimakan (jujur)
-  const snacks = entries.filter(x => x.e.meals.noSnack === false);
-  if (snacks.length) {
-    tbl.innerHTML += `<tr><th colspan="4">🍪 Catatan ngemil (${snacks.length} hari)</th></tr>` + snacks.map(x =>
-      `<tr><td colspan="4">${x.d.getDate()} ${MONTHS[x.d.getMonth()]} — ${esc(x.e.snackNote || '(tidak dicatat)')}</td></tr>`).join('');
+  const snackDays = entries.filter(x => x.e.meals.noSnack === false || (x.e.snacks && x.e.snacks.length));
+  if (snackDays.length) {
+    const top = {};
+    let kcal = 0;
+    snackDays.forEach(x => (x.e.snacks || []).forEach(sn => {
+      const k = sn.name.trim().toLowerCase(); top[k] = top[k] || { name: sn.name, qty: 0 };
+      top[k].qty += sn.qty || 1; kcal += (sn.kcal || 0) * (sn.qty || 1);
+    }));
+    const topList = Object.values(top).sort((a, b) => b.qty - a.qty).slice(0, 5);
+    tbl.innerHTML += `<tr><th colspan="4">🍪 Ngemil di ${snackDays.length} hari${kcal ? ` · ±${kcal} kkal` : ''}</th></tr>`
+      + (topList.length ? `<tr><td colspan="4"><b>Paling sering:</b> ${topList.map(t => `${esc(t.name)} (${t.qty}×)`).join(', ')}</td></tr>` : '')
+      + snackDays.map(x => `<tr><td colspan="4">${x.d.getDate()} ${MONTHS[x.d.getMonth()]} — ${
+        (x.e.snacks && x.e.snacks.length) ? x.e.snacks.map(sn => esc(sn.name) + (sn.qty > 1 ? ' ×' + sn.qty : '')).join(', ') : esc(x.e.snackNote || '(tidak dicatat)')}</td></tr>`).join('');
   }
 }
 

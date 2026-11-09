@@ -7,7 +7,7 @@ def wwwDir = new File(project.buildDir, 'generated/www')
 
 tasks.register('copyWeb', Copy) {
     from(new File(rootDir, '..')) {
-        include 'index.html', 'style.css', 'app.js', 'manifest.json', 'sw.js', 'icons/**'
+        include 'index.html', 'style.css', 'app.js', 'extra.js', 'manifest.json', 'sw.js', 'icons/**'
     }
     into new File(wwwDir, 'www')
 }

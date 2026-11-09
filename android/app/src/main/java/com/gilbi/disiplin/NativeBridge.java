@@ -13,7 +13,12 @@ import android.media.AudioAttributes;
 import android.media.MediaCodec;
 import android.media.MediaExtractor;
 import android.media.MediaFormat;
+import android.media.MediaMetadataRetriever;
 import android.media.MediaMuxer;
+import android.graphics.Bitmap;
+import android.graphics.Color;
+import android.view.WindowManager;
+import java.io.ByteArrayOutputStream;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.os.Build;
@@ -95,7 +100,7 @@ public class NativeBridge {
 
     private String[] mediaPerms() {
         if (Build.VERSION.SDK_INT >= 33)
-            return new String[]{Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO};
+            return new String[]{Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_IMAGES};
         return new String[]{Manifest.permission.READ_EXTERNAL_STORAGE};
     }
 
@@ -117,12 +122,14 @@ public class NativeBridge {
         JSONArray out = new JSONArray();
         query(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, "audio", out);
         query(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, "video", out);
+        query(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, "image", out);
         return out.toString();
     }
 
     private void query(Uri base, String kind, JSONArray out) {
         boolean q = Build.VERSION.SDK_INT >= 29;
-        String[] proj = {"_id", "_display_name", "duration", "_size", "date_added", q ? "relative_path" : "_data"};
+        boolean img = "image".equals(kind); // tabel foto tidak punya kolom durasi
+        String[] proj = {"_id", "_display_name", img ? "_size" : "duration", "_size", "date_added", q ? "relative_path" : "_data"};
         try (Cursor c = act.getContentResolver().query(base, proj, null, null, "date_added DESC")) {
             if (c == null) return;
             while (c.moveToNext()) {
@@ -141,7 +148,7 @@ public class NativeBridge {
                 JSONObject o = new JSONObject();
                 o.put("uri", ContentUris.withAppendedId(base, c.getLong(0)).toString());
                 o.put("name", c.getString(1) == null ? "(tanpa nama)" : c.getString(1));
-                o.put("duration", c.getLong(2));
+                o.put("duration", img ? 0 : c.getLong(2));
                 o.put("size", size);
                 o.put("added", c.getLong(4));
                 o.put("folder", folder);
@@ -276,6 +283,100 @@ public class NativeBridge {
         }
     }
 
+    // ---------------- Wallpaper layar alarm ----------------
+
+    /** Salin foto/video jadi wallpaper. Hasil: window.onNativeWallUsed(key, ok, name, kind). */
+    @JavascriptInterface
+    public void useWall(String key, String uri, String name, String kind) {
+        new Thread(() -> {
+            File dest = AlarmScheduler.wallFile(act, key);
+            File tmp = new File(dest.getParentFile(), dest.getName() + ".tmp");
+            boolean ok;
+            try {
+                tmp.delete();
+                copy(Uri.parse(uri), tmp);
+                ok = "video".equals(kind) ? hasVideoFrame(tmp) : AlarmActivity.decodeSampled(tmp, 64, 64) != null;
+                if (ok) { dest.delete(); ok = tmp.renameTo(dest); }
+            } catch (Exception e) {
+                ok = false;
+            }
+            tmp.delete();
+            act.js("window.onNativeWallUsed && window.onNativeWallUsed(" + JSONObject.quote(key) + "," + ok + ","
+                    + JSONObject.quote(name) + "," + JSONObject.quote(kind == null ? "image" : kind) + ")");
+        }).start();
+    }
+
+    private boolean hasVideoFrame(File f) {
+        MediaMetadataRetriever r = new MediaMetadataRetriever();
+        try {
+            r.setDataSource(f.getAbsolutePath());
+            return r.getFrameAtTime(0) != null;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            try { r.release(); } catch (Exception ignored) {}
+        }
+    }
+
+    /** Thumbnail kecil (JPEG base64) dari wallpaper, untuk pratinjau di aplikasi. */
+    @JavascriptInterface
+    public String wallThumb(String key) {
+        File f = AlarmScheduler.wallFile(act, key);
+        if (!f.exists()) return "";
+        Bitmap bmp = AlarmActivity.decodeSampled(f, 360, 360);
+        if (bmp == null) {
+            MediaMetadataRetriever r = new MediaMetadataRetriever();
+            try { r.setDataSource(f.getAbsolutePath()); bmp = r.getFrameAtTime(0); } catch (Exception ignored) {}
+            finally { try { r.release(); } catch (Exception ignored) {} }
+        }
+        if (bmp == null) return "";
+        int w = Math.min(480, bmp.getWidth());
+        Bitmap small = Bitmap.createScaledBitmap(bmp, w, Math.max(1, bmp.getHeight() * w / bmp.getWidth()), true);
+        ByteArrayOutputStream bo = new ByteArrayOutputStream();
+        small.compress(Bitmap.CompressFormat.JPEG, 75, bo);
+        return Base64.encodeToString(bo.toByteArray(), Base64.NO_WRAP);
+    }
+
+    /** Tampilkan contoh layar alarm (tanpa suara). */
+    @JavascriptInterface
+    public void previewAlarmScreen(String src) {
+        JSONObject a = AlarmScheduler.findAlarm(act, src);
+        Intent i = new Intent(act, AlarmActivity.class)
+                .putExtra(AlarmActivity.EXTRA_PREVIEW, true)
+                .putExtra(AlarmScheduler.EXTRA_SRC, src == null ? "" : src)
+                .putExtra(AlarmScheduler.EXTRA_LABEL, a != null ? a.optString("label") : "Contoh layar alarm")
+                .putExtra(AlarmScheduler.EXTRA_TIME, a != null ? a.optString("time") : "")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        act.startActivity(i);
+    }
+
+    // ---------------- Lain-lain ----------------
+
+    /** Ambil (lalu kosongkan) catatan jam alarm dimatikan. */
+    @JavascriptInterface
+    public String takeWakeLog() {
+        String v = AlarmScheduler.prefs(act).getString("wakelog", "[]");
+        AlarmScheduler.prefs(act).edit().putString("wakelog", "[]").apply();
+        return v;
+    }
+
+    @JavascriptInterface
+    public void keepScreenOn(boolean on) {
+        act.runOnUiThread(() -> {
+            if (on) act.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else act.getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        });
+    }
+
+    @JavascriptInterface
+    public void setStatusBarColor(String hex) {
+        act.runOnUiThread(() -> { try { act.getWindow().setStatusBarColor(Color.parseColor(hex)); } catch (Exception ignored) {} });
+    }
+
+    /** File yang dibagikan dari aplikasi lain (JSON) atau "" kalau tidak ada. */
+    @JavascriptInterface
+    public String takeShared() { return act.takeShared(); }
+
     // ---------------- Izin ----------------
 
     @JavascriptInterface
@@ -338,7 +439,7 @@ public class NativeBridge {
             if (Build.VERSION.SDK_INT >= 29) {
                 ContentValues v = new ContentValues();
                 v.put(MediaStore.Downloads.DISPLAY_NAME, name);
-                v.put(MediaStore.Downloads.MIME_TYPE, "application/json");
+                v.put(MediaStore.Downloads.MIME_TYPE, name.endsWith(".csv") ? "text/csv" : "application/json");
                 v.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
                 Uri uri = act.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, v);
                 try (OutputStream o = act.getContentResolver().openOutputStream(uri)) { o.write(data); }

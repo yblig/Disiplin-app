@@ -93,10 +93,10 @@ public class AlarmService extends Service {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "disiplin:alarm");
             wakeLock.acquire(MAX_RING_MS + 60000);
         }
+        handler.removeCallbacksAndMessages(null);
         JSONObject cfg = AlarmScheduler.config(this);
         startSound(cfg, intent.getStringExtra(AlarmScheduler.EXTRA_SRC));
         if (cfg.optBoolean("vibrate", true)) startVibrate();
-        handler.removeCallbacksAndMessages(null);
         handler.postDelayed(this::stopSelf, test ? 6000 : MAX_RING_MS);
         return START_NOT_STICKY;
     }
@@ -149,17 +149,32 @@ public class AlarmService extends Service {
             } catch (Exception ignored) { return; }
         }
 
-        float base = Math.min(1f, vol / 100f);
-        player.setVolume(base, base);
-        if (vol > 100) {
+        final float base = Math.min(1f, vol / 100f);
+        // 100 mB = 1 dB; 800% ≈ +18 dB, 3000% (MAKS) ≈ +29.5 dB
+        final int gain = vol > 100 ? (int) Math.round(2000 * Math.log10(vol / 100.0)) : 0;
+        final boolean gradual = a != null && a.optBoolean("gradual", false);
+        player.setVolume(gradual ? base * 0.05f : base, gradual ? base * 0.05f : base);
+        if (gain > 0) {
             try {
                 enhancer = new LoudnessEnhancer(player.getAudioSessionId());
-                // 100 mB = 1 dB; 800% ≈ +18 dB, 3000% (MAKS) ≈ +29.5 dB
-                enhancer.setTargetGain((int) Math.round(2000 * Math.log10(vol / 100.0)));
+                enhancer.setTargetGain(gradual ? 0 : gain);
                 enhancer.setEnabled(true);
             } catch (Exception ignored) {}
         }
         player.start();
+        if (gradual) {
+            // volume naik bertahap selama 30 detik sampai volume pilihan
+            for (int i = 1; i <= 30; i++) {
+                final float f = i / 30f;
+                handler.postDelayed(() -> {
+                    if (player == null) return;
+                    try {
+                        player.setVolume(base * f, base * f);
+                        if (enhancer != null) enhancer.setTargetGain((int) (gain * f));
+                    } catch (Exception ignored) {}
+                }, i * 1000L);
+            }
+        }
     }
 
     private MediaPlayer buildPlayer(Uri uri) throws Exception {

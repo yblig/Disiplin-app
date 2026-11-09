@@ -12,6 +12,18 @@ Aplikasi web (PWA) untuk membangun kebiasaan disiplin: pengingat super keras, ch
 - **Perkembangan** — grafik batang + tabel keberhasilan per kegiatan untuk minggu, bulan, dan tahun; streak 🔥 hari beruntun skor ≥ 80%.
 - **Offline & data di HP** — tersimpan di perangkat, ada ekspor/impor cadangan.
 
+## ✨ Fitur baru
+- 🎨 Desain baru + 6 tema warna (Api, Galaxy, Laut, Hutan, Senja, Malam) dan mode Otomatis/Terang/Gelap
+- 🖼️ Wallpaper layar alarm dari foto atau video (umum & per alarm) + tombol "Lihat tampilan"
+- 🍪 Catat banyak snack sekaligus: jumlah, jam, perkiraan kalori, tombol cepat; statistik snack paling sering
+- ⌨️ Tantangan matikan alarm: hitungan, ketik kalimat, atau keduanya
+- 📈 Volume naik bertahap (opsional per alarm) · 📄 Duplikat alarm · ⚡ Template alarm cepat
+- 📥 "Bagikan → Disiplin" dari galeri/file manager untuk dijadikan suara atau wallpaper alarm
+- 💪 Tab Sehat: berat badan + grafik + target + BMI, minum air, mood & jurnal, catatan tidur & jam bangun,
+  timer olahraga interval (dengan suara pemandu), timer fokus belajar (Pomodoro)
+- ⭐ Level & XP, 🏅 17 lencana prestasi, 🗓️ kalender setahun, 📰 laporan 7 hari, 🎉 konfeti
+- 💬 Kutipan motivasi sendiri, 📅 penghitung "Hari ke-N", 📄 ekspor laporan CSV
+
 ## 📱 APK Android (disarankan — alarm asli)
 Download **Disiplin.apk** dari https://github.com/yblig/Disiplin-app/releases/tag/apk-latest, buka di HP, izinkan "Instal dari sumber tidak dikenal".
 Di versi APK alarm dijadwalkan oleh Android (AlarmManager): tetap bunyi walau aplikasi ditutup, HP dikunci, atau habis restart; volume alarm HP dinaikkan ke maksimal lalu di-boost lagi (LoudnessEnhancer) sesuai slider sampai 800%.

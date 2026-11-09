@@ -71,6 +71,42 @@ public class MainActivity extends Activity {
         web.loadUrl("https://appassets.androidplatform.net/assets/www/index.html");
 
         AlarmScheduler.scheduleAll(this);
+        handleShare(getIntent(), false);
+    }
+
+    private String pendingShared = "";
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        handleShare(intent, true);
+    }
+
+    /** "Bagikan → Disiplin": foto/video/audio dari aplikasi lain. */
+    private void handleShare(Intent intent, boolean live) {
+        if (intent == null || !Intent.ACTION_SEND.equals(intent.getAction())) return;
+        Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        if (uri == null) return;
+        String type = intent.getType() == null ? "" : intent.getType();
+        try { String t = getContentResolver().getType(uri); if (t != null) type = t; } catch (Exception ignored) {}
+        String kind = type.startsWith("video") ? "video" : type.startsWith("image") ? "image" : "audio";
+        String name = "file";
+        try (android.database.Cursor c = getContentResolver().query(uri, new String[]{android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst() && c.getString(0) != null) name = c.getString(0);
+        } catch (Exception ignored) {}
+        try {
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put("uri", uri.toString()); o.put("name", name); o.put("kind", kind);
+            if (live) js("window.onNativeShared && window.onNativeShared(" + org.json.JSONObject.quote(o.toString()) + ")");
+            else pendingShared = o.toString();
+        } catch (Exception ignored) {}
+        intent.setAction(Intent.ACTION_MAIN);
+    }
+
+    String takeShared() {
+        String v = pendingShared;
+        pendingShared = "";
+        return v;
     }
 
     @Override

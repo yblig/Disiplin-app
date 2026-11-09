@@ -12,11 +12,19 @@
 </head>
 <body>
   <header class="top">
-    <div>
+    <div class="who">
       <div class="hello" id="hello">Halo!</div>
       <div class="date" id="todayLabel"></div>
+      <div class="chips">
+        <span class="chip streak-chip" id="streak" title="Hari beruntun dengan skor ≥ 80%">🔥 0</span>
+        <span class="chip" id="dayChip">📅 Hari ke-1</span>
+        <span class="chip" id="lvChip">⭐ Lv 1</span>
+      </div>
     </div>
-    <div class="streak" id="streak" title="Hari beruntun dengan skor ≥ 80%">🔥 0</div>
+    <div class="ringprog" title="Progres checklist hari ini">
+      <svg viewBox="0 0 64 64"><circle class="bgc" cx="32" cy="32" r="27"/><circle class="fgc" id="ringFg" cx="32" cy="32" r="27" stroke-dasharray="169.6" stroke-dashoffset="169.6"/></svg>
+      <span id="ringPct">0%</span>
+    </div>
   </header>
 
   <main>
@@ -35,14 +43,11 @@
         <h2>🍽️ Aturan Makan</h2>
         <p class="hint">Cuma boleh makan <b>pagi (sebelum/di sekolah)</b> dan <b>malam</b>. Tanpa snack / ngemil.</p>
         <ul class="checklist" id="meallist"></ul>
-        <div id="snackNoteWrap" class="hidden">
-          <label class="lbl">Kamu ngemil apa? (jujur)</label>
-          <input type="text" id="snackNote" placeholder="mis. keripik, gorengan, es manis...">
-        </div>
+        <div id="snackBox"></div>
       </div>
 
       <div class="card">
-        <label class="honest"><input type="checkbox" id="honestPledge"> Aku menjawab semua di atas dengan <b>JUJUR</b>.</label>
+        <label class="honest"><input type="checkbox" id="honestPledge"><span>Aku menjawab semua di atas dengan <b>JUJUR</b>.</span></label>
         <button class="btn primary big" id="saveDay">💾 Simpan Hari Ini</button>
         <div class="score" id="todayScore"></div>
       </div>
@@ -78,8 +83,21 @@
         <p class="hint">Dipakai semua alarm yang diatur <b>"Ikut pengaturan umum"</b>. Tiap alarm juga bisa punya suara & volume sendiri (tekan ✏️ di daftar pengingat).<br>
         100% = normal. Di atas 100% suara <b>dikuatkan digital</b> sampai <b>3000% (MAKS ≈ +30 dB)</b>. Di APK, volume alarm HP otomatis dinaikkan ke penuh dulu.</p>
         <div id="defaultSound"></div>
-        <label class="honest"><input type="checkbox" id="mathLock"> Harus jawab soal hitungan untuk mematikan alarm (biar beneran melek)</label>
+        <label class="lbl">Cara mematikan alarm (biar beneran melek)</label>
+        <select id="challengeSel">
+          <option value="math">🧮 Jawab soal hitungan</option>
+          <option value="type">⌨️ Ketik kalimat semangat</option>
+          <option value="both">🧮+⌨️ Hitungan DAN ketik kalimat</option>
+          <option value="none">👆 Tekan tombol saja</option>
+        </select>
+        <input type="checkbox" id="mathLock" hidden>
         <label class="honest"><input type="checkbox" id="vibrate"> Getar</label>
+      </div>
+
+      <div class="card">
+        <h2>🖼️ Wallpaper Layar Alarm</h2>
+        <p class="hint">Foto atau video yang tampil di belakang tombol "Aku sudah bangun". Tiap alarm juga bisa punya wallpaper sendiri (✏️).</p>
+        <div id="defaultWall"></div>
       </div>
 
       <div class="card">
@@ -92,11 +110,95 @@
           <div class="days" id="newAlarmDays"></div>
           <button class="btn primary" id="addAlarm">➕ Tambah</button>
         </div>
+        <h3>⚡ Template cepat</h3>
+        <div class="templates" id="templates"></div>
+      </div>
+    </section>
+
+    <!-- ================= SEHAT ================= -->
+    <section id="tab-health" class="tab">
+      <div class="card">
+        <h2>⚖️ Berat Badan</h2>
+        <div class="bigstat"><b id="wNow">–</b><span>kg</span><span class="hint" id="wDelta"></span></div>
+        <div class="form inline" style="grid-template-columns:minmax(0,1fr) auto">
+          <input type="number" id="wInput" step="0.1" inputmode="decimal" placeholder="Berat hari ini (kg)">
+          <button class="btn primary" id="wSave">Simpan</button>
+        </div>
+        <canvas id="wChart" height="180"></canvas>
+        <div class="row">
+          <div style="flex:1 1 120px"><label class="lbl">Tinggi (cm)</label><input type="number" id="hInput" inputmode="decimal"></div>
+          <div style="flex:1 1 120px"><label class="lbl">Target berat (kg)</label><input type="number" id="wTarget" step="0.1" inputmode="decimal"></div>
+        </div>
+        <p class="hint" id="bmiInfo"></p>
+        <ul class="weights" id="wList"></ul>
+      </div>
+
+      <div class="card">
+        <h2>💧 Minum Air</h2>
+        <p class="hint">Ketuk gelas untuk mencatat. Target <b id="waterTargetLbl">8</b> gelas sehari.</p>
+        <div class="water" id="water"></div>
+        <div class="row">
+          <button class="btn" id="waterMinus">➖ 1 gelas</button>
+          <button class="btn primary" id="waterPlus">➕ 1 gelas</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>😊 Mood & Jurnal Hari Ini</h2>
+        <div class="moods" id="moods"></div>
+        <label class="lbl">Hari ini aku bersyukur karena...</label>
+        <textarea id="jGrateful"></textarea>
+        <label class="lbl">Besok aku akan lebih baik dengan cara...</label>
+        <textarea id="jTomorrow"></textarea>
+      </div>
+
+      <div class="card">
+        <h2>😴 Tidur & Bangun</h2>
+        <p class="hint">Dicatat otomatis: jam kamu menekan "Aku tidur sekarang" dan jam kamu mematikan alarm pagi.</p>
+        <div class="summary" id="sleepSummary"></div>
+        <canvas id="wakeChart" height="170"></canvas>
+      </div>
+
+      <div class="card timer">
+        <h2>🏃 Timer Olahraga</h2>
+        <div class="tphase" id="woPhase">Siap?</div>
+        <div class="tdisp" id="woDisp">00:30</div>
+        <div class="tex" id="woEx">Tekan Mulai</div>
+        <div class="tset">
+          <div><label>Gerak (detik)</label><input type="number" id="woWork" value="30"></div>
+          <div><label>Istirahat</label><input type="number" id="woRest" value="15"></div>
+          <div><label>Ronde</label><input type="number" id="woRounds" value="8"></div>
+        </div>
+        <div class="row">
+          <button class="btn primary" id="woStart">▶️ Mulai</button>
+          <button class="btn" id="woStop">⏹️ Stop</button>
+        </div>
+      </div>
+
+      <div class="card timer">
+        <h2>📚 Timer Fokus Belajar</h2>
+        <div class="tphase" id="foPhase">Fokus 25 menit, istirahat 5 menit</div>
+        <div class="tdisp" id="foDisp">25:00</div>
+        <div class="tex" id="foCount">Sesi selesai hari ini: 0</div>
+        <div class="row">
+          <button class="btn primary" id="foStart">▶️ Mulai fokus</button>
+          <button class="btn" id="foStop">⏹️ Stop</button>
+        </div>
       </div>
     </section>
 
     <!-- ================= PERKEMBANGAN ================= -->
     <section id="tab-stats" class="tab">
+      <div class="card">
+        <div class="level">
+          <div class="lvbadge"><small>LEVEL</small><span id="lvNum">1</span></div>
+          <div style="flex:1;min-width:0">
+            <b id="lvTitle">Pemula</b>
+            <div class="hint" id="lvXp" style="margin:2px 0 0"></div>
+            <div class="xpbar"><i id="lvBar" style="width:0%"></i></div>
+          </div>
+        </div>
+      </div>
       <div class="card">
         <div class="seg" id="periodSeg">
           <button data-p="week" class="on">Minggu</button>
@@ -116,6 +218,15 @@
         <h2>📊 Tabel Perkembangan</h2>
         <div class="tablewrap"><table id="statTable"></table></div>
       </div>
+      <div class="card">
+        <h2>🗓️ Kalender Setahun</h2>
+        <p class="hint">Tiap kotak = 1 hari. Hijau = skor ≥ 80%.</p>
+        <div class="heat" id="heat"></div>
+      </div>
+      <div class="card">
+        <h2>🏅 Lencana Prestasi</h2>
+        <div class="badges" id="badges"></div>
+      </div>
     </section>
 
     <!-- ================= ATUR ================= -->
@@ -123,6 +234,16 @@
       <div class="card">
         <h2>👤 Nama</h2>
         <input type="text" id="userName" placeholder="Nama kamu">
+      </div>
+      <div class="card">
+        <h2>🎨 Tema</h2>
+        <div class="themes" id="themes"></div>
+        <label class="lbl">Mode</label>
+        <div class="seg" id="modeSeg">
+          <button data-m="auto">🌓 Otomatis</button>
+          <button data-m="light">☀️ Terang</button>
+          <button data-m="dark">🌙 Gelap</button>
+        </div>
       </div>
       <div class="card">
         <h2>📝 Kegiatan Checklist</h2>
@@ -135,11 +256,25 @@
         </div>
       </div>
       <div class="card">
+        <h2>💬 Kutipan Motivasi Sendiri</h2>
+        <p class="hint">Tulis kata-kata penyemangatmu. Akan muncul bergantian di halaman Hari Ini.</p>
+        <ul class="quotes" id="quoteList"></ul>
+        <div class="form inline" style="grid-template-columns:minmax(0,1fr) auto">
+          <input type="text" id="newQuote" placeholder="mis. Aku bisa! Demi aku yang lebih sehat.">
+          <button class="btn primary" id="addQuote">➕</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>📅 Mulai Berubah Sejak</h2>
+        <input type="date" id="startDate">
+      </div>
+      <div class="card">
         <h2>💾 Cadangan Data</h2>
         <p class="hint">Data disimpan di HP ini. Simpan cadangan sesekali supaya tidak hilang.</p>
         <div class="row">
           <button class="btn" id="exportData">⬇️ Ekspor</button>
           <label class="btn">⬆️ Impor<input type="file" id="importData" accept="application/json" hidden></label>
+          <button class="btn" id="exportCsv">📄 Laporan CSV</button>
         </div>
       </div>
     </section>
@@ -148,18 +283,26 @@
   <nav class="bottom">
     <button data-tab="today" class="on">✅<span>Hari Ini</span></button>
     <button data-tab="alarms">⏰<span>Pengingat</span></button>
-    <button data-tab="stats">📈<span>Perkembangan</span></button>
+    <button data-tab="health">💪<span>Sehat</span></button>
+    <button data-tab="stats">📈<span>Progres</span></button>
     <button data-tab="settings">⚙️<span>Atur</span></button>
   </nav>
 
   <!-- Overlay alarm -->
   <div id="ring" class="ring hidden">
+    <img class="wall hidden" id="ringImg" alt="">
+    <video class="wall hidden" id="ringVid" muted loop playsinline></video>
     <div class="ringbox">
       <div class="ringtime" id="ringTime">05:00</div>
       <div class="ringlabel" id="ringLabel">Bangun!</div>
       <div id="mathBox" class="hidden">
         <div class="mathq" id="mathQ"></div>
         <input type="number" inputmode="numeric" id="mathA" placeholder="Jawaban">
+      </div>
+      <div id="typeBox" class="hidden">
+        <div class="hint" style="color:#fff">Ketik persis kalimat ini:</div>
+        <div class="mathq" id="typeQ"></div>
+        <input type="text" id="typeA" placeholder="Ketik di sini" autocomplete="off">
       </div>
       <button class="btn primary big" id="dismiss">Aku sudah bangun 💪</button>
       <button class="btn" id="snooze">Tunda 5 menit (maks 1x)</button>
@@ -170,22 +313,20 @@
   <div id="picker" class="picker hidden">
     <div class="pickhead">
       <button class="btn small" id="pickClose">✕</button>
-      <b>Pilih lagu / video dari HP</b>
+      <b id="pickTitle">Pilih lagu / video dari HP</b>
     </div>
     <div class="pickbody">
-      <input type="text" id="pickSearch" placeholder="🔍 Cari judul lagu / video / folder...">
-      <div class="seg" id="pickSeg">
-        <button data-k="all" class="on">Semua</button>
-        <button data-k="audio">🎵 Audio</button>
-        <button data-k="video">🎬 Video</button>
-      </div>
+      <input type="text" id="pickSearch" placeholder="🔍 Cari nama file / folder...">
+      <div class="seg" id="pickSeg"></div>
       <div class="hint" id="pickInfo"></div>
-      <button class="btn primary big hidden" id="pickPerm">🔓 Izinkan akses lagu & video</button>
+      <button class="btn primary big hidden" id="pickPerm">🔓 Izinkan akses file media</button>
       <ul class="picklist" id="pickList"></ul>
     </div>
   </div>
 
+  <canvas id="confetti" class="hidden"></canvas>
   <div id="toast" class="toast"></div>
   <script src="app.js"></script>
+  <script src="extra.js"></script>
 </body>
 </html>

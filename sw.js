@@ -1,5 +1,5 @@
-const CACHE = 'disiplin-v1';
-const FILES = ['./', './index.html', './style.css', './app.js', './manifest.json', './icons/icon.svg'];
+const CACHE = 'disiplin-v2';
+const FILES = ['./', './index.html', './style.css', './app.js', './extra.js', './manifest.json', './icons/icon.svg'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES)));
   self.skipWaiting();

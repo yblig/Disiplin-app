@@ -66,6 +66,26 @@ public final class AlarmScheduler {
         return new File(dir, (key == null || key.isEmpty() ? "default" : key).replaceAll("[^A-Za-z0-9_-]", "_"));
     }
 
+    /** File wallpaper layar alarm: walls/<key>. */
+    static File wallFile(Context c, String key) {
+        File dir = new File(c.getFilesDir(), "walls");
+        dir.mkdirs();
+        return new File(dir, (key == null || key.isEmpty() ? "default" : key).replaceAll("[^A-Za-z0-9_-]", "_"));
+    }
+
+    /** Catat jam alarm dimatikan (dibaca aplikasi web untuk statistik bangun). */
+    static void logWake(Context c, String time, String label) {
+        try {
+            JSONArray arr = new JSONArray(prefs(c).getString("wakelog", "[]"));
+            JSONObject o = new JSONObject();
+            o.put("t", System.currentTimeMillis());
+            o.put("time", time == null ? "" : time);
+            o.put("label", label == null ? "" : label);
+            arr.put(o);
+            prefs(c).edit().putString("wakelog", arr.toString()).apply();
+        } catch (Exception ignored) {}
+    }
+
     static JSONObject findAlarm(Context c, String id) {
         if (id == null || id.isEmpty()) return null;
         JSONArray alarms = config(c).optJSONArray("alarms");
