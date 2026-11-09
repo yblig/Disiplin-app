@@ -534,6 +534,7 @@ function loadMedia() {
 }
 function closePicker() {
   if (NATIVE) NATIVE.stopPreview();
+  closePreview(); dlInfo('');
   previewing = null; pickState = null;
   $('#picker').classList.add('hidden');
 }
@@ -547,33 +548,100 @@ function renderPicker() {
   const cnt = k => pool.filter(m => m.kind === k).length;
   const names = { audio: 'audio', video: 'video', image: 'foto' };
   $('#pickInfo').textContent = pool.length
-    ? `Ditemukan ${M.kinds.map(k => cnt(k) + ' ' + names[k]).join(' & ')}. Tampil ${Math.min(list.length, 300)} dari ${list.length}${list.length > 300 ? ' — ketik untuk mencari' : ''}.`
+    ? `Ditemukan ${M.kinds.map(k => cnt(k) + ' ' + names[k]).join(' & ')}. Tampil ${Math.min(list.length, 300)} dari ${list.length}${list.length > 300 ? ' — ketik untuk mencari' : ''}. 👆 Ketuk nama/gambar untuk lihat atau dengar dulu.`
     : 'Tidak ada file yang cocok di HP ini.';
   const ul = $('#pickList'); ul.innerHTML = '';
   list.slice(0, 300).forEach(m => {
     const li = document.createElement('li');
-    li.innerHTML = `<span class="pk-ic">${m.kind === 'video' ? '🎬' : m.kind === 'image' ? '🖼️' : '🎵'}</span>
-      <div class="pk-info"><div class="pk-name">${esc(m.name)}</div><div class="d">${esc(m.folder || '')}${m.duration ? ' · ' + fmtDur(m.duration) : ''}</div></div>`;
+    const ic = m.kind === 'video' ? '🎬' : m.kind === 'image' ? '🖼️' : '🎵';
+    li.innerHTML = (m.kind === 'audio' ? `<span class="pk-ic pk-open">${ic}</span>`
+        : `<img class="pk-thumb pk-open" loading="lazy" src="${thumbUrl(m.uri)}" alt="" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'pk-ic',textContent:'${ic}'}))">`)
+      + `<div class="pk-info pk-open"><div class="pk-name">${esc(m.name)}</div><div class="d">${m.kind === 'video' ? '🎬 ' : ''}${esc(m.folder || '')}${m.duration ? ' · ' + fmtDur(m.duration) : ''}</div></div>`;
+    li.querySelectorAll('.pk-open').forEach(el => el.onclick = () => openPreview(m));
     const play = document.createElement('button'); play.className = 'btn small' + (pickState.mode === 'wall' ? ' hidden' : ''); play.textContent = previewing === m.uri ? '⏹' : '▶';
     play.onclick = () => {
       if (previewing === m.uri) { NATIVE.stopPreview(); previewing = null; } else { NATIVE.previewMedia(m.uri); previewing = m.uri; }
       renderPicker();
     };
     const use = document.createElement('button'); use.className = 'btn small primary'; use.textContent = 'Pilih';
-    use.onclick = () => {
-      if (pickState.busy) return;
-      NATIVE.stopPreview(); previewing = null; pickState.busy = true;
-      if (pickState.mode === 'wall') {
-        $('#pickInfo').textContent = '💾 Menyimpan wallpaper...';
-        NATIVE.useWall(pickState.key, m.uri, m.name, m.kind);
-        return;
-      }
-      $('#pickInfo').textContent = m.kind === 'video' ? '🎬 Mengubah video jadi suara alarm... tunggu sebentar' : '💾 Menyimpan suara...';
-      NATIVE.useMedia(pickState.key, m.uri, m.name, m.kind === 'video');
-    };
+    use.onclick = () => chooseMedia(m);
     li.append(play, use); ul.append(li);
   });
 }
+function chooseMedia(m) {
+  if (!pickState || pickState.busy) return;
+  if (!PICK_MODES[pickState.mode].kinds.includes(m.kind)) return toast(pickState.mode === 'wall' ? 'Audio tidak bisa jadi wallpaper, pilih foto/video' : 'Foto tidak bisa jadi suara, pilih audio/video');
+  closePreview();
+  NATIVE.stopPreview(); previewing = null; pickState.busy = true;
+  if (pickState.mode === 'wall') {
+    $('#pickInfo').textContent = '💾 Menyimpan wallpaper...';
+    NATIVE.useWall(pickState.key, m.uri, m.name, m.kind);
+    return;
+  }
+  $('#pickInfo').textContent = m.kind === 'video' ? '🎬 Mengubah video jadi suara alarm... tunggu sebentar' : '💾 Menyimpan suara...';
+  NATIVE.useMedia(pickState.key, m.uri, m.name, m.kind === 'video');
+}
+
+// ---------- pratinjau foto / video / suara ----------
+const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const thumbUrl = uri => '/thumb/' + b64url(uri);
+const mediaUrl = uri => '/media/' + b64url(uri);
+let previewItem = null;
+function openPreview(m) {
+  if (NATIVE) NATIVE.stopPreview();
+  previewing = null;
+  previewItem = m;
+  $('#pvName').textContent = m.name;
+  const body = $('#pvBody'), src = mediaUrl(m.uri);
+  if (m.kind === 'image') body.innerHTML = `<img src="${src}" alt="">`;
+  else if (m.kind === 'video') body.innerHTML = `<video src="${src}" controls autoplay playsinline loop></video>`;
+  else body.innerHTML = `<div class="pvaudio"><div>🎵</div><audio src="${src}" controls autoplay></audio></div>`;
+  const ok = pickState && PICK_MODES[pickState.mode].kinds.includes(m.kind);
+  $('#pvUse').classList.toggle('hidden', !ok);
+  $('#pvUse').textContent = pickState && pickState.mode === 'wall' ? '🖼️ Pakai jadi wallpaper' : '🎵 Pakai jadi suara alarm';
+  $('#preview').classList.remove('hidden');
+}
+function closePreview() {
+  const body = $('#pvBody');
+  body.querySelectorAll('video,audio').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+  body.innerHTML = '';
+  $('#preview').classList.add('hidden');
+  previewItem = null;
+}
+$('#pvClose').onclick = closePreview;
+$('#pvUse').onclick = () => { if (previewItem) chooseMedia(previewItem); };
+
+// ---------- download dari link (file langsung) ----------
+const BLOCKED_HOSTS = /(^|\.)(youtube\.com|youtu\.be|youtube-nocookie\.com|tiktok\.com|tiktokv\.com|instagram\.com|facebook\.com|fb\.watch|spotify\.com)$/i;
+function dlInfo(msg) { const el = $('#dlInfo'); el.classList.toggle('hidden', !msg); el.innerHTML = msg || ''; }
+$('#pickDl').onclick = () => {
+  const url = $('#pickUrl').value.trim();
+  if (!url) return toast('Tempel link filenya dulu');
+  let host = '';
+  try { host = new URL(url).hostname; } catch (e) { return toast('Link tidak valid'); }
+  if (BLOCKED_HOSTS.test(host)) {
+    return dlInfo('⚠️ <b>Link YouTube / TikTok / Instagram tidak bisa di-download di aplikasi ini.</b> Aturan platform itu melarang videonya diunduh tanpa izin. ' +
+      'Pakai link <b>file langsung</b> (yang berakhiran .mp3, .mp4, .jpg, dll.), atau file yang sudah ada di HP-mu.');
+  }
+  if (!NATIVE || !NATIVE.downloadUrl) return toast('Download dari link hanya ada di APK');
+  dlInfo('⬇️ Mengunduh...');
+  $('#pickDl').disabled = true;
+  NATIVE.downloadUrl(url);
+};
+window.onNativeDownloadProgress = (done, total) => {
+  dlInfo(`⬇️ Mengunduh... ${(done / 1048576).toFixed(1)} MB${total > 0 ? ' dari ' + (total / 1048576).toFixed(1) + ' MB (' + Math.round(done / total * 100) + '%)' : ''}`);
+};
+window.onNativeDownloaded = json => {
+  $('#pickDl').disabled = false;
+  let r; try { r = JSON.parse(json); } catch (e) { r = { ok: false, error: 'Gagal' }; }
+  if (!r.ok) return dlInfo('❌ ' + esc(r.error || 'Gagal mengunduh'));
+  dlInfo(`✅ Berhasil: <b>${esc(r.name)}</b> (${(r.size / 1048576).toFixed(1)} MB). Lihat pratinjaunya lalu tekan "Pakai".`);
+  $('#pickUrl').value = '';
+  const item = { uri: r.uri, name: r.name, kind: r.kind, folder: '🔗 Dari link', duration: 0, size: r.size, added: Date.now() / 1000 + 1e9 };
+  mediaCache = [item].concat(mediaCache || []);
+  renderPicker();
+  openPreview(item);
+};
 window.onNativeMediaPermission = granted => {
   if (!pickState) return;
   if (granted) { $('#pickPerm').classList.add('hidden'); loadMedia(); }

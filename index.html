@@ -316,12 +316,24 @@
       <b id="pickTitle">Pilih lagu / video dari HP</b>
     </div>
     <div class="pickbody">
+      <div class="linkrow">
+        <input type="url" id="pickUrl" placeholder="🔗 Tempel link file (.mp3 / .mp4 / .jpg ...)" inputmode="url">
+        <button class="btn primary" id="pickDl">⬇️ Download</button>
+      </div>
+      <div class="hint hidden" id="dlInfo"></div>
       <input type="text" id="pickSearch" placeholder="🔍 Cari nama file / folder...">
       <div class="seg" id="pickSeg"></div>
       <div class="hint" id="pickInfo"></div>
       <button class="btn primary big hidden" id="pickPerm">🔓 Izinkan akses file media</button>
       <ul class="picklist" id="pickList"></ul>
     </div>
+  </div>
+
+  <!-- Pratinjau foto / video / suara -->
+  <div id="preview" class="preview hidden">
+    <div class="pvhead"><button class="btn small" id="pvClose">✕</button><b id="pvName"></b></div>
+    <div class="pvbody" id="pvBody"></div>
+    <div class="pvfoot"><button class="btn primary big" id="pvUse">✅ Pakai ini</button></div>
   </div>
 
   <canvas id="confetti" class="hidden"></canvas>

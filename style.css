@@ -249,3 +249,20 @@ nav.bottom button.on::before { content: ""; position: absolute; top: 0; left: 30
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 300; width: 100%; height: 100%; }
 td.num, th { white-space: nowrap; }
+
+/* link download & pratinjau */
+.linkrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; }
+.linkrow input { width: 100%; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 1rem; min-width: 0; }
+.pk-open { cursor: pointer; }
+.pk-thumb { width: 52px; height: 52px; border-radius: 10px; object-fit: cover; background: var(--line); flex-shrink: 0; }
+.preview { position: fixed; inset: 0; z-index: 180; background: #000; display: flex; flex-direction: column; color: #fff; }
+.pvhead { display: flex; align-items: center; gap: 10px; padding: 12px 14px; background: rgba(0,0,0,.6); }
+.pvhead b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pvhead .btn { background: rgba(255,255,255,.15); color: #fff; border-color: rgba(255,255,255,.3); }
+.pvbody { flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px; }
+.pvbody img, .pvbody video { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 8px; }
+.pvbody audio { width: 100%; }
+.pvbody .pvaudio { text-align: center; width: 100%; max-width: 420px; }
+.pvbody .pvaudio div { font-size: 4rem; margin-bottom: 12px; }
+.pvfoot { padding: 12px 14px calc(14px + env(safe-area-inset-bottom)); }
+.walledit .wallprev { max-height: 220px; }

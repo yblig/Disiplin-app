@@ -283,6 +283,96 @@ public class NativeBridge {
         }
     }
 
+    // ---------------- Download dari link (file langsung) ----------------
+
+    /**
+     * Download file dari link langsung (mp3, m4a, ogg, wav, mp4, webm, jpg, png, gif, ...).
+     * Halaman web (mis. YouTube / TikTok) ditolak karena bukan file.
+     * Hasil: window.onNativeDownloaded(json) dengan {ok, uri, name, kind, size, error}.
+     */
+    @JavascriptInterface
+    public void downloadUrl(String url) {
+        new Thread(() -> {
+            JSONObject res = new JSONObject();
+            java.net.HttpURLConnection con = null;
+            File out = null;
+            try {
+                java.net.URL u = new java.net.URL(url.trim());
+                String proto = u.getProtocol();
+                if (!"http".equals(proto) && !"https".equals(proto)) throw new Exception("Link harus diawali http:// atau https://");
+                con = (java.net.HttpURLConnection) u.openConnection();
+                con.setInstanceFollowRedirects(true);
+                con.setConnectTimeout(15000);
+                con.setReadTimeout(30000);
+                con.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) Disiplin/1.0");
+                int code = con.getResponseCode();
+                if (code >= 400) throw new Exception("Server menjawab " + code);
+                String type = con.getContentType() == null ? "" : con.getContentType().toLowerCase(java.util.Locale.ROOT);
+                String name = fileName(con, con.getURL());
+                String kind = kindOf(type, name);
+                if (kind == null) {
+                    if (type.startsWith("text/html")) throw new Exception("Link ini halaman web, bukan file langsung. Pakai link yang berakhiran .mp3 / .mp4 / .jpg dll.");
+                    throw new Exception("Jenis file tidak didukung (" + (type.isEmpty() ? "tidak diketahui" : type) + ")");
+                }
+                long len = con.getContentLengthLong();
+                if (len > 300L * 1024 * 1024) throw new Exception("File terlalu besar (maks 300 MB)");
+                File dir = new File(act.getCacheDir(), "dl");
+                dir.mkdirs();
+                out = new File(dir, System.currentTimeMillis() + "_" + name.replaceAll("[^A-Za-z0-9._-]", "_"));
+                long total = 0, lastReport = 0;
+                try (InputStream in = con.getInputStream(); FileOutputStream o = new FileOutputStream(out)) {
+                    byte[] buf = new byte[128 * 1024];
+                    int n;
+                    while ((n = in.read(buf)) > 0) {
+                        o.write(buf, 0, n);
+                        total += n;
+                        if (total > 300L * 1024 * 1024) throw new Exception("File terlalu besar (maks 300 MB)");
+                        if (total - lastReport > 512 * 1024) {
+                            lastReport = total;
+                            act.js("window.onNativeDownloadProgress && window.onNativeDownloadProgress(" + total + "," + len + ")");
+                        }
+                    }
+                }
+                res.put("ok", true);
+                res.put("uri", Uri.fromFile(out).toString());
+                res.put("name", name);
+                res.put("kind", kind);
+                res.put("size", total);
+            } catch (Exception e) {
+                if (out != null) out.delete();
+                try { res.put("ok", false); res.put("error", e.getMessage() == null ? e.toString() : e.getMessage()); } catch (Exception ignored) {}
+            } finally {
+                if (con != null) con.disconnect();
+            }
+            act.js("window.onNativeDownloaded && window.onNativeDownloaded(" + JSONObject.quote(res.toString()) + ")");
+        }).start();
+    }
+
+    private static String kindOf(String type, String name) {
+        String n = name.toLowerCase(java.util.Locale.ROOT);
+        if (type.startsWith("audio/")) return "audio";
+        if (type.startsWith("video/")) return "video";
+        if (type.startsWith("image/")) return "image";
+        if (n.matches(".*\\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|amr|mid|midi)$")) return "audio";
+        if (n.matches(".*\\.(mp4|m4v|webm|mkv|3gp|mov)$")) return "video";
+        if (n.matches(".*\\.(jpg|jpeg|png|gif|webp|bmp|heic)$")) return "image";
+        return null;
+    }
+
+    private static String fileName(java.net.HttpURLConnection con, java.net.URL url) {
+        String cd = con.getHeaderField("Content-Disposition");
+        if (cd != null) {
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("filename\\*?=(?:UTF-8'')?\"?([^\";]+)").matcher(cd);
+            if (m.find()) {
+                try { return java.net.URLDecoder.decode(m.group(1), "UTF-8"); } catch (Exception ignored) { return m.group(1); }
+            }
+        }
+        String p = url.getPath();
+        String last = p == null ? "" : p.substring(p.lastIndexOf('/') + 1);
+        try { last = java.net.URLDecoder.decode(last, "UTF-8"); } catch (Exception ignored) {}
+        return last.isEmpty() ? "download" : last;
+    }
+
     // ---------------- Wallpaper layar alarm ----------------
 
     /** Salin foto/video jadi wallpaper. Hasil: window.onNativeWallUsed(key, ok, name, kind). */

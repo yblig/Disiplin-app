@@ -478,8 +478,10 @@ function wallEditor(t, key, isAlarm, onChange = () => {}) {
     q('.w-name').textContent = t.wallName ? `✅ ${t.wallKind === 'video' ? '🎬' : '🖼️'} ${t.wallName}` : 'Belum ada foto/video dipilih.';
     const pv = q('.w-prev'); pv.innerHTML = '';
     if (sel.value !== 'custom' || !t.wallName) return;
-    if (NATIVE && NATIVE.wallThumb) {
-      try { const b64 = NATIVE.wallThumb(key); if (b64) pv.innerHTML = `<img class="wallprev" src="data:image/jpeg;base64,${b64}">`; } catch (e) {}
+    if (NATIVE) {
+      // pratinjau langsung dari file wallpaper yang tersimpan (video ikut bergerak)
+      const src = `/wallfile/${encodeURIComponent(key)}?t=${Date.now()}`;
+      pv.innerHTML = t.wallKind === 'video' ? `<video class="wallprev" src="${src}" muted autoplay loop playsinline></video>` : `<img class="wallprev" src="${src}" alt="">`;
     } else {
       const blob = await idbGet('wall-' + key).catch(() => null);
       if (blob) {

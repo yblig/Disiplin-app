@@ -29,6 +29,9 @@ public class MainActivity extends Activity {
 
         final WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
                 .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
+                .addPathHandler("/thumb/", MediaServer.thumb(this))
+                .addPathHandler("/media/", MediaServer.media(this))
+                .addPathHandler("/wallfile/", MediaServer.wallFile(this))
                 .build();
 
         web = new WebView(this);
